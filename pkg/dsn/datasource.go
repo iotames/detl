@@ -1,9 +1,9 @@
-package pkg
+package dsn
 
 import "fmt"
 
 type DataSource struct {
-	driverName string
+	DriverName string
 	Dsn        string
 }
 
@@ -12,10 +12,38 @@ type DsnGroup struct {
 	DsnList      []DataSource
 }
 
+func (d DsnGroup) GetDefaultDSN() (driverName, dsn string) {
+	if len(d.DsnList) == 0 {
+		return "", ""
+	}
+	driverName, dsn = d.GetActiveDSN()
+	if d.activeDriver == "" || driverName == "" {
+		return d.DsnList[0].DriverName, d.DsnList[0].Dsn
+	}
+	return driverName, dsn
+}
+
+func (d DsnGroup) GetActiveDSN() (driverName, dsn string) {
+	mp := d.getDsnMap()
+	var ok bool
+	if dsn, ok = mp[d.activeDriver]; !ok {
+		return "", ""
+	}
+	return d.activeDriver, dsn
+}
+
+func (d DsnGroup) getDsnMap() map[string]string {
+	mp := make(map[string]string, len(d.DsnList))
+	for _, dd := range d.DsnList {
+		mp[dd.DriverName] = dd.Dsn
+	}
+	return mp
+}
+
 func (d DsnGroup) GetDSN(driverName string) string {
 	ddd := ""
 	for _, dd := range d.DsnList {
-		if dd.driverName == driverName {
+		if dd.DriverName == driverName {
 			ddd = dd.Dsn
 			break
 		}
@@ -44,7 +72,7 @@ func (d *DsnGroup) Active(driverName string) error {
 	}
 	found := false
 	for _, dd := range d.DsnList {
-		if dd.driverName == driverName {
+		if dd.DriverName == driverName {
 			found = true
 		}
 	}
@@ -56,12 +84,5 @@ func (d *DsnGroup) Active(driverName string) error {
 }
 
 func (d *DsnGroup) AppendDsn(dsn, driverName string) {
-	d.DsnList = append(d.DsnList, DataSource{Dsn: dsn, driverName: driverName})
-}
-
-func NewDsnConf(dsn, drivername string) *DsnGroup {
-	return &DsnGroup{
-		activeDriver: drivername,
-		DsnList:      []DataSource{{driverName: drivername, Dsn: dsn}},
-	}
+	d.DsnList = append(d.DsnList, DataSource{Dsn: dsn, DriverName: driverName})
 }

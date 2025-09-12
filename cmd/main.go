@@ -1,21 +1,31 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 
 	"github.com/iotames/detl/conf"
 	"github.com/iotames/easyconf"
-	// "github.com/iotames/easydb"
 )
 
-var ActiveDsn string
+var ActiveDsn, Version string
 
 func main() {
 	cf := conf.GetConf("")
 	fmt.Println("GetScriptDir:", cf.GetScriptDir())
-	cf.SetActiveDSN(ActiveDsn, "postgres123")
-	dsn := cf.GetDSN("postgres123")
-	fmt.Println(dsn)
+	// "postgres" 必须填写正确
+	err := cf.SetActiveDSN(ActiveDsn, "postgres")
+	// && !strings.Contains(err.Error(), "has actived")
+	if err != nil {
+		panic(fmt.Errorf("SetActiveDSN:%s", err))
+	}
+	name, dsn := cf.GetDefaultDSN()
+	fmt.Println("GetDefaultDSN:", name, dsn)
+	err = DbPing(name, dsn)
+	if err != nil {
+		panic(fmt.Errorf("DbPing:%s", err))
+	}
+	fmt.Println("DbPing:", name, dsn)
 }
 
 func init() {
@@ -27,4 +37,6 @@ func init() {
 	env.Parse()
 	cf := conf.GetConf(ConfDir)
 	cf.SetScriptDir(ScriptDir)
+	flag.StringVar(&Version, "version", "unstable", "显示版本信息")
+	flag.Parse()
 }
