@@ -47,43 +47,47 @@ func (c Conf) GetScriptDir() string {
 	return c.envMap["SCRIPT_DIR"]
 }
 
-func (c Conf) SetActiveDSN(dsn, driverName string) error {
-	var err error
-	var dsngp *pkgdsn.DsnGroup
+func (c Conf) InitDSN(driverName, dsn string) (dsnconf *pkgdsn.DsnConf, err error, isInit bool) {
 	filename := "dsn.json"
+	dgp := &pkgdsn.DsnGroup{}
 	fpath := filepath.Join(c.dirPath, filename)
-	dsnconf := pkgdsn.NewDsnConf(fpath, dsn, driverName)
+	dsnconf = pkgdsn.NewDsnConf(fpath)
 	pkgdsn.GetDsnConf(dsnconf)
-
 	if !miniutils.IsPathExists(fpath) {
-		return dsnconf.Save()
+		fmt.Println("create conf file:", fpath)
+		err = dgp.AppendDsn(driverName, dsn)
+		if err != nil {
+			return dsnconf, err, true
+		}
+		err = dsnconf.SaveDsnGroup(*dgp)
+		return dsnconf, err, true
 	}
-	err = dsnconf.Read()
+	return dsnconf, err, false
+}
+
+func (c Conf) SetActiveDSN(driverName, dsn string) error {
+	dsnconf, err, isInit := c.InitDSN(driverName, dsn)
 	if err != nil {
 		return err
 	}
-	dsngp = dsnconf.GetDsnGroup()
-	if !dsngp.HasDsn(dsn) {
-		dsngp.AppendDsn(dsn, driverName)
+	if isInit {
+		return err
 	}
-	if !dsngp.HasActive(driverName) {
-		err = dsngp.Active(driverName)
-		if err != nil {
-			return err
-		}
-		return dsnconf.Save()
+	dgp := &pkgdsn.DsnGroup{}
+	err = dsnconf.GetDsnGroup(dgp)
+	if err != nil {
+		return err
 	}
-	// return fmt.Errorf("dsn has actived")
-	return nil
-}
-
-func (c Conf) GetDefaultDSN() (driverName, dsn string) {
-	dsnconf := pkgdsn.GetDsnConf(nil)
-	fmt.Printf("---dsnconf.GetDsnGroup----(%+v)-----\n", dsnconf.GetDsnGroup())
-	return dsnconf.GetDsnGroup().GetDefaultDSN()
-}
-
-func (c Conf) GetDSN(driverName string) string {
-	dsngp := pkgdsn.DsnGroup{}
-	return dsngp.GetDSN(driverName)
+	dsnCode := miniutils.Md5(dsn)
+	if dgp.HasActive(dsnCode) {
+		return nil
+	}
+	if !dgp.HasDsn(dsn) {
+		dgp.AppendDsn(driverName, dsn)
+	}
+	err = dgp.Active(dsnCode)
+	if err != nil {
+		return err
+	}
+	return dsnconf.SaveDsnGroup(*dgp)
 }

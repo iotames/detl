@@ -2,3 +2,4 @@
 default.env
 script
 conf
+*.exe

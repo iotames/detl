@@ -5,7 +5,7 @@ go 1.24.1
 require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/iotames/easyconf v1.1.2
-	github.com/iotames/easydb v0.0.0-20250910064118-92b38f701d95
+	github.com/iotames/easydb v0.0.1
 	github.com/iotames/miniutils v1.0.11
 	github.com/lib/pq v1.10.9
 )
