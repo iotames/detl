@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	pkgdsn "github.com/iotames/detl/pkg/dsn"
+	pkgdsn "github.com/iotames/easydb/dsn"
 	"github.com/iotames/miniutils"
 )
 
@@ -45,6 +45,10 @@ func (c *Conf) SetScriptDir(d string) error {
 
 func (c Conf) GetScriptDir() string {
 	return c.envMap["SCRIPT_DIR"]
+}
+
+func (c Conf) GetScriptFilePath(fname string) string {
+	return filepath.Join(c.GetScriptDir(), fname)
 }
 
 func (c Conf) InitDSN(driverName, dsn string) (dsnconf *pkgdsn.DsnConf, err error, isInit bool) {

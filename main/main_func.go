@@ -4,9 +4,19 @@ import (
 	"database/sql"
 	"log"
 
-	pkgdsn "github.com/iotames/detl/pkg/dsn"
+	"github.com/iotames/detl"
 	"github.com/iotames/easydb"
+	pkgdsn "github.com/iotames/easydb/dsn"
+	_ "github.com/lib/pq"
 )
+
+func getUserSQL() string {
+	sqltxt, err := detl.GetSqlText(cf, "getusers.sql")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return sqltxt
+}
 
 func dbTest() error {
 	var sqldb *sql.DB
@@ -26,7 +36,7 @@ func dbTest() error {
 
 		var datalist []map[string]interface{}
 
-		err = d.GetMany("SELECT id, name, age, wallet_balance FROM users", &datalist)
+		err = d.GetMany(getUserSQL(), &datalist)
 		if err != nil {
 			return err
 		}

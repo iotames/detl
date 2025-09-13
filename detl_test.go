@@ -1,4 +1,4 @@
-package easydb
+package detl
 
 import (
 	"testing"
