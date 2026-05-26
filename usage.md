@@ -2,239 +2,169 @@
 
 ## 概述
 
-detl 是一个命令行 ETL 工具，通过 **Go 代码** 或 **任务定义文件** 来描述数据流程：从数据源抽取 → 转换 → 载入到目标端。
-
-> **当前实现状态**：核心 Pipeline 引擎已可用，支持 PG/MySQL SQL 抽取、Go 函数转换、CSV 文件写入。其余功能为规划中。
+detl 是一个命令行 ETL 工具，通过**环境变量 + 配置文件 + 脚本**驱动，无需修改源代码。
 
 ---
 
-## 安装与运行
+## 安装
 
 ```bash
-# 构建
-go build -o detl.exe ./cmd/detl    # 📋 CLI 待实现
+go build -o main.exe ./main
 ```
 
-当前通过 Go 测试运行 ETL 流程：
+---
+
+## 环境变量配置
+
+通过环境变量控制完整的 ETL 流程：
+
+| 模块 | 环境变量 | 默认值 | 说明 |
+|---|---|---|---|
+| **Source** | `CONF_DIR` | `conf` | 配置目录（存放 dsn.json） |
+| | `SCRIPT_DIR` | `script` | ETL 业务脚本目录 |
+| | `DB_DRIVER` | `postgres` | 数据库驱动：`postgres` / `mysql` |
+| | `SCRIPT_FILE` | `e_detl_users.sql` | 抽取脚本文件名 |
+| | `ACTIVE_DSN` | （PG 默认） | 默认 DSN 连接字符串 |
+| **Transform** | `TRANSFORM_MODE` | `builtin` | 转换模式：`builtin` / `python` / `none` |
+| | `TRANSFORM_SCRIPT` | `t_users.py` | Python 转换脚本（`python` 模式） |
+| **Load** | `LOAD_TYPE` | `csv` | 输出类型：`csv` / `stdout` |
+| | `OUTPUT_DIR` | `output` | 输出目录 |
+| | `OUTPUT_FILE` | `etl_output.csv` | 输出文件名 |
+| | `OUTPUT_COLUMNS` | `id,full_name,...` | CSV 列名（逗号分隔） |
+
+---
+
+## Source（数据抽取）
+
+### SQL
 
 ```bash
-# 运行 PG → Transform → CSV 集成测试
-go test -v -run TestPipeline_PG_to_CSV
-
-# 运行 MySQL → Transform → CSV 集成测试
-go test -v -run TestPipeline_MySQL_to_CSV
+DB_DRIVER=postgres SCRIPT_FILE=e_getusers.sql ./main.exe
+DB_DRIVER=mysql    SCRIPT_FILE=e_detl_users.sql ./main.exe
 ```
 
-### 环境变量（规划中）
+程序从 `CONF_DIR/dsn.json` 中查找与 `DB_DRIVER` 匹配的 DSN。
 
-| 环境变量 | 对应参数 |
-|---|---|
-| `CONF_DIR` | 配置目录（默认 `conf`） |
-| `SCRIPT_DIR` | 脚本目录（默认 `script`） |
-| `DB_DRIVER` | 默认数据库驱动（默认 `postgres`） |
-| `ACTIVE_DSN` | 默认数据源连接字符串 |
+### 文件（CSV/JSON）— 📋 待实现
 
 ---
 
-## Pipeline 编程接口
+## Transform（数据转换）
 
-当前通过 Go 代码直接调用 `internal/` 包的 API 来编排 ETL 流程。
+### 模式一：内置转换（builtin）
 
-### Source（数据抽取）✅
-
-#### SQL
-
-从 PostgreSQL 或 MySQL 按查询语句抽取数据。
-
-```go
-import "github.com/iotames/detl/internal/source"
-
-src := source.NewSQL(source.SQLConfig{
-    Driver: "postgres",               // "postgres" | "mysql"
-    DSN:    "host=127.0.0.1 ...",     // 连接字符串
-    Query:  "SELECT * FROM users",    // SQL 查询
-})
-```
-
-#### 文件（CSV / JSON）📋 待实现
-
-从本地文件读取数据。
-
-### Transform（数据转换）✅
-
-通过 Go 函数实现数据转换。
-
-```go
-import "github.com/iotames/detl/internal/transform"
-
-tf := transform.Func(func(row map[string]any) ([]map[string]any, error) {
-    // 字段映射
-    row["user_id"] = row["id"]
-    // 类型转换
-    row["age"] = int(row["age"].(int64))
-    // 新增计算字段
-    row["full_name"] = fmt.Sprintf("%s %s", row["first_name"], row["last_name"])
-    // 删除字段
-    delete(row, "first_name")
-    delete(row, "last_name")
-    return []map[string]any{row}, nil
-})
-```
-
-返回约定：
-- 返回包含单行的 `[]map[string]any`：替换当前行
-- 返回空 `nil`：跳过该行（不输出到 Load）
-- 返回多行：展开为多行
-
-### Load（数据载入）✅ CSV / 📋 其他待实现
-
-#### CSV 文件写入 ✅
-
-```go
-import "github.com/iotames/detl/internal/load"
-
-ld := load.NewCSV(load.CSVConfig{
-    Path:    "./output/users.csv",       // 输出路径
-    Columns: []string{"id", "name", "email"},  // 列名顺序
-})
-```
-
-#### SQL 写入（UPSERT）📋 待实现
-
-#### 控制台输出 📋 待实现
-
-#### 多目标 📋 待实现
-
-### Pipeline 编排 ✅
-
-```go
-import "github.com/iotames/detl/internal/engine"
-
-p := engine.New(src, tf, ld)
-if err := p.Run(); err != nil {
-    // 处理错误
-}
-```
-
-### 完整示例 ✅
-
-```go
-package main
-
-import (
-    "database/sql"
-    "fmt"
-    _ "github.com/lib/pq"
-    "github.com/iotames/detl/internal/engine"
-    "github.com/iotames/detl/internal/load"
-    "github.com/iotames/detl/internal/source"
-    "github.com/iotames/detl/internal/transform"
-)
-
-func main() {
-    // 1. Source：从 Postgres 抽取
-    src := source.NewSQL(source.SQLConfig{
-        Driver: "postgres",
-        DSN:    "user=postgres password=postgres dbname=postgres host=127.0.0.1 port=5432 sslmode=disable",
-        Query:  "SELECT id, first_name, last_name, email, age, created_at FROM users",
-    })
-
-    // 2. Transform：清洗转换
-    tf := transform.Func(func(row map[string]any) ([]map[string]any, error) {
-        fn := fmt.Sprintf("%v", row["first_name"])
-        ln := fmt.Sprintf("%v", row["last_name"])
-        fullName := fn
-        if ln != "" && ln != "<nil>" {
-            fullName += " " + ln
-        }
-        return []map[string]any{{
-            "id":        row["id"],
-            "full_name": fullName,
-            "email":     row["email"],
-        }}, nil
-    })
-
-    // 3. Load：写入 CSV
-    ld := load.NewCSV(load.CSVConfig{
-        Path:    "./users.csv",
-        Columns: []string{"id", "full_name", "email"},
-    })
-
-    // 4. 运行 Pipeline
-    p := engine.New(src, tf, ld)
-    if err := p.Run(); err != nil {
-        panic(err)
-    }
-    fmt.Println("完成")
-}
-```
-
----
-
-## 集成测试
-
-### PostgreSQL
+默认模式。自动执行：姓名拼接、邮箱小写、NULL age → 0、日期格式化。
 
 ```bash
-go test -v -run TestPipeline_PG_to_CSV
+TRANSFORM_MODE=builtin ./main.exe
 ```
 
-测试流程：
-1. 连接 PG（`user=postgres password=postgres dbname=postgres host=127.0.0.1 port=5432`）
-2. 创建 `detl_test_users` 表并插入 5 行测试数据
-3. 执行 Pipeline：SQL 抽取 → 姓名拼接/邮箱小写/NULL 处理/日期格式化 → CSV 输出
-4. 验证 CSV 内容
+### 模式二：Python 脚本（python）
 
-### MySQL
+启动一个常驻 Python 子进程，逐行处理数据。脚本通过 stdin/stdout 以 JSON 格式通信。
 
 ```bash
-go test -v -run TestPipeline_MySQL_to_CSV
+TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 ```
 
-测试流程同上，数据库为 `detl_test`，连接 `root:root@127.0.0.1:3306`。测试表保留不删除。
+#### Python 脚本接口
+
+| 方向 | 格式 | 说明 |
+|---|---|---|
+| stdin（输入） | 每行一个 JSON | 原始数据行 |
+| stdout（输出） | 每行一个 JSON | 转换后的数据行 |
+| stdout | `null` | 跳过该行（不输出） |
+| stderr | 任意 | 错误日志透传 |
+
+#### 示例脚本
+
+`main/script/t_users.py`：
+
+```python
+import sys, json
+
+for line in sys.stdin:
+    row = json.loads(line.strip())
+    # 转换逻辑
+    row["full_name"] = f"{row.get('first_name','')} {row.get('last_name','')}".strip()
+    row["email"] = (row.get("email") or "").lower()
+    if row.get("age") is None:
+        row["age"] = 0
+    # 输出结果（必须 flush）
+    print(json.dumps(row), flush=True)
+```
+
+### 模式三：透传（none）
+
+不对数据做任何转换，原始数据直接输出：
+
+```bash
+TRANSFORM_MODE=none ./main.exe
+```
 
 ---
 
-## DSN 配置管理
+## Load（数据载入）
 
-连接字符串存储在 `conf/dsn.json` 中，支持多数据源管理。
+### CSV 文件
 
-```json
-{
-  "list": [
-    {
-      "code": "a1b2c3d4e5f6g7h8",
-      "driver": "postgres",
-      "dsn": "host=... dbname=prod",
-      "active": true
-    },
-    {
-      "code": "i9j0k1l2m3n4o5p6",
-      "driver": "mysql",
-      "dsn": "user=... dbname=staging",
-      "active": false
-    }
-  ]
-}
+```bash
+LOAD_TYPE=csv OUTPUT_DIR=output OUTPUT_FILE=result.csv ./main.exe
+```
+
+CSV 列名通过 `OUTPUT_COLUMNS` 指定。未指定时按 map key 排序输出。
+
+### 控制台输出
+
+```bash
+LOAD_TYPE=stdout ./main.exe
+```
+
+以 CSV 格式打印到终端，适用于调试和管道。
+
+---
+
+## 完整示例
+
+### 示例 1：Postgres → 内置转换 → CSV
+
+```bash
+CONF_DIR=main/conf SCRIPT_DIR=main/script \
+  DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql \
+  TRANSFORM_MODE=builtin \
+  LOAD_TYPE=csv OUTPUT_FILE=pg_users.csv \
+  ./main.exe
+```
+
+### 示例 2：MySQL → Python 转换 → Stdout
+
+```bash
+CONF_DIR=main/conf SCRIPT_DIR=main/script \
+  DB_DRIVER=mysql SCRIPT_FILE=e_detl_users.sql \
+  TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py \
+  LOAD_TYPE=stdout \
+  ./main.exe
 ```
 
 ---
 
-## 目录结构约定
+## 目录结构
 
 ```
 detl/
 ├── conf/                   # 配置文件目录
-│   └── dsn.json           # 数据源连接配置
 ├── script/                 # ETL 业务脚本
+│   ├── e_*.sql            # 抽取脚本
+│   └── t_*.py             # 转换脚本
+├── main/                   # 程序入口
+│   ├── main.go
+│   ├── main_func.go
+│   ├── conf/dsn.json      # 🔒 本地 DSN 配置
+│   └── script/             # 🔒 本地脚本
 ├── internal/               # 核心库
-│   ├── engine/             # ✅ Pipeline 编排
-│   ├── source/             # ✅ 数据抽取
-│   ├── transform/          # ✅ 数据转换
-│   └── load/               # ✅ 数据载入
-└── output/                 # 文件输出目录
+│   ├── engine/             # Pipeline 编排
+│   ├── source/             # 数据抽取
+│   ├── transform/          # 数据转换
+│   └── load/               # 数据载入
+└── output/                 # 输出文件
 ```
-
----
-
-> **注**：带 ✅ 标记的为已实现功能，📋 标记的为规划中。本文档将随开发迭代持续更新。
