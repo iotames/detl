@@ -12,11 +12,25 @@
 
 ## 当前状态
 
-项目处于**早期开发阶段**，目前完成了：
-- 基础配置系统（环境变量 + 命令行参数 + DSN 文件管理）: `conf` 目录存放基础配置文件，如：`dsn.json` 存放数据库连接配置。
-- ETL业务脚本系统：`script/` 目录存放ETL业务脚本文件，包括：.sql, .json, .yml, .py 等。
+项目处于**开发阶段**，已完成：
 
-**待实现**：MySQL 支持、文件/API 数据源、数据转换逻辑、数据写入目标端、完整的测试覆盖。支持ETL骨架文件和各种脚本的拆分组合。
+### ✅ 已实现
+| 模块 | 内容 | 测试 |
+|---|---|---|
+| **Source** | SQL 数据源：PostgreSQL + MySQL | ✅ 集成测试通过 |
+| **Transform** | Func 适配器（Go 函数转换） | ✅ 集成测试通过 |
+| **Load** | CSV 文件写入 | ✅ 集成测试通过 |
+| **Engine** | Pipeline 编排（Source → Transform → Load） | ✅ 集成测试通过 |
+| **配置** | 环境变量 + 命令行 + DSN 文件管理 | 基础可用 |
+
+### 📋 待实现
+- 文件 Source（CSV/JSON）
+- Load：SQL 写入（UPSERT）
+- Load：控制台输出（Stdout）
+- Transform：Python 脚本支持
+- CLI 命令行工具（`-task`, `-dir`）
+- YAML/JSON 任务定义
+- HTTP API 数据源
 
 ## ETL业务脚本系统规范
 
@@ -55,32 +69,29 @@
 
 ---
 
-### 包结构规划
+### 包结构
 
 ```
 detl/
-├── cmd/detl/main.go        # CLI 入口（轻量，只引 engine）
-├── internal/
+├── internal/                           # ✅ 核心库
 │   ├── engine/
-│   │   ├── pipeline.go      # Pipeline 编排（串行/并行 Job）
-│   │   └── job.go           # Job 定义（Source → Transform → Load）
+│   │   └── pipeline.go                 # ✅ Pipeline 编排
 │   ├── source/
-│   │   ├── source.go        # Source 接口定义
-│   │   ├── sql.go           # 从数据库抽取
-│   │   └── file.go          # 从文件读取（CSV, JSON）
+│   │   ├── source.go                   # ✅ Source 接口
+│   │   ├── sql.go                      # ✅ SQL 数据源（PG + MySQL）
+│   │   └── file.go                     # 📋 待实现：文件读取
 │   ├── transform/
-│   │   ├── transform.go     # Transformer 接口定义
-│   │   └── expr.go          # 脚本表达式转换
+│   │   └── transform.go                # ✅ Transformer 接口 + Func 适配器
 │   ├── load/
-│   │   ├── load.go          # Load 接口定义
-│   │   ├── sql.go           # 写入数据库（UPSERT）
-│   │   ├── file.go          # 写入文件
-│   │   └── stdout.go        # 控制台输出
-│   └── config/
-│       ├── config.go        # 全局配置
-│       └── task.go          # 任务定义（YAML 描述 ETL 流程）
-├── conf/                    # 运行时配置目录（dsn.json 等）
-├── script/                  # ETL业务脚本存放目录。包括：.sql, .json, .yml, .py 等。
+│   │   ├── load.go                     # ✅ Load 接口
+│   │   ├── csv.go                      # ✅ CSV 文件写入
+│   │   ├── sql.go                      # 📋 待实现：数据库写入
+│   │   └── stdout.go                   # 📋 待实现：控制台输出
+│   └── config/                         # 📋 待实现：任务配置
+├── cmd/detl/main.go                    # 📋 待实现：CLI 入口
+├── conf/                               # 运行时配置目录（dsn.json 等）
+├── script/                             # ETL业务脚本存放目录
+├── detl_test.go                        # ✅ 集成测试
 ├── go.mod
 ├── AGENTS.md
 └── README.md
@@ -140,16 +151,18 @@ load:
 
 ### 阶段实施计划
 
-| 步骤 | 内容 | 说明 |
-|---|---|---|
-| 1 | 修复配置系统 Bug + 重构 | 修复 `GetConf("")` 重复调用问题，整理配置层 |
-| 2 | 定义核心接口 + Pipeline Engine | 搭建 Source/Transform/Load 骨架 |
-| 3 | 实现 SQL Source（MySQL + Postgres）| 增加 MySQL 驱动支持 |
-| 4 | 实现 Load：SQL（UPSERT）、Stdout | 打通端到端数据流 |
-| 5 | 实现文件 Source/Load（CSV、JSON）| 文件数据源支持 |
-| 6 | 实现 Transform 表达式引擎 | ETL 核心价值 |
-| 7 | 实现 YAML 任务定义 + CLI 编排 | 提升可用性 |
-| 8 | 完整的测试覆盖 | 保证质量 |
+| 步骤 | 内容 | 说明 | 状态 |
+|---|---|---|---|
+| 1 | 定义核心接口 + Pipeline Engine | Source/Transform/Load 骨架 | ✅ |
+| 2 | 实现 SQL Source（MySQL + Postgres）| 数据库数据抽取 | ✅ |
+| 3 | 实现 Load：CSV 文件写入 | 文件输出 | ✅ |
+| 4 | 实现 Transform Func 适配器 | Go 函数转换 | ✅ |
+| 5 | 修复配置系统 Bug + 重构 | 修复 `GetConf("")` 重复调用 | 📋 |
+| 6 | 实现 Load：SQL（UPSERT）、Stdout | 数据库写入 + 控制台 | 📋 |
+| 7 | 实现文件 Source/Load（CSV、JSON）| 文件数据源 | 📋 |
+| 8 | 实现 YAML 任务定义 + CLI 编排 | 可用性提升 | 📋 |
+| 9 | 实现 Transform Python 脚本引擎 | ETL 核心价值 | 📋 |
+| 10 | 完整的测试覆盖 | 保证质量 | 📋 |
 
 ---
 
