@@ -12,9 +12,9 @@ var ActiveDsn, Version string
 var cf *conf.Conf
 
 func main() {
-	err := dbTest()
+	err := etlDemo()
 	if err != nil {
-		panic(fmt.Errorf("dbTest:%s", err))
+		panic(fmt.Errorf("etlDemo:%s", err))
 	}
 }
 

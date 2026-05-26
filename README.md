@@ -10,7 +10,84 @@
 
 ---
 
-## 当前状态
+## Hello ETL：MySQL → 清洗转换 → CSV
+
+一条完整的 ETL 流程，5 分钟跑通。
+
+### 流程概览
+
+```
+MySQL(detl_test.detl_test_users)
+    │ 抽取：SELECT id, first_name, last_name, ...
+    ▼
+Transform（姓名拼接、邮箱小写、NULL 处理、日期格式化）
+    │
+    ▼
+CSV 文件（output/etl_demo.csv）
+```
+
+### 涉及的文件
+
+| 文件 | 作用 |
+|---|---|
+| `main/conf/dsn.json` | 数据库连接配置（PG + MySQL） |
+| `main/script/e_detl_users.sql` | 抽取脚本：从 `detl_test` 库读取用户数据 |
+| `main/etl_demo.go` | ETL 编排代码：Source → Transform → Load |
+| `output/etl_demo.csv` | 输出结果（保留以供审查） |
+
+### 1. 配置数据源
+
+`main/conf/dsn.json` 中配置了两个数据源：
+
+```json
+{
+  "DsnList": [
+    {"DriverName": "postgres", "Dsn": "user=postgres ..."},
+    {"DriverName": "mysql",    "Dsn": "root:root@tcp(127.0.0.1:3306)/detl_test?charset=utf8mb4"}
+  ]
+}
+```
+
+### 2. 编写抽取脚本
+
+`main/script/e_detl_users.sql`：
+
+```sql
+SELECT id, first_name, last_name, email, age, created_at
+FROM detl_test_users
+ORDER BY id
+```
+
+### 3. 运行 ETL
+
+```bash
+cd detl
+CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=mysql go run ./main
+```
+
+### 4. 输出结果
+
+`output/etl_demo.csv`：
+
+```csv
+id,full_name,email,age,created_at,source,etl_time
+1,John Doe,john@example.com,30,2024-01-15,mysql,2026-05-26 18:43:25
+2,Jane Smith,jane@example.com,25,2024-02-20,mysql,2026-05-26 18:43:25
+3,Bob,bob@test.com,0,2024-03-10,mysql,2026-05-26 18:43:25
+4,Alice Wang,alice.wang@test.com,28,2024-04-05,mysql,2026-05-26 18:43:25
+5,Lee,null_first@example.com,35,2024-05-01,mysql,2026-05-26 18:43:25
+```
+
+### 转换逻辑说明
+
+| 输入 | 转换 | 输出 |
+|---|---|---|
+| first_name + last_name（含 NULL） | 拼接 full_name | `John Doe`, `Bob`, `Lee` |
+| `JANE@EXAMPLE.COM` | 小写 | `jane@example.com` |
+| age = NULL | 默认 0 | `0` |
+| `2024-01-15` (DATE) | 格式化 | `2024-01-15` |
+| — | 添加 etl_time | 运行时间戳 |
+| — | 添加 source | `mysql` |
 
 项目处于**开发阶段**，已完成：
 
