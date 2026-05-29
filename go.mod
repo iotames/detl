@@ -5,13 +5,11 @@ go 1.24.1
 require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/iotames/easyconf v1.1.3
-	github.com/iotames/easydb v0.2.0
+	github.com/iotames/easydb v0.6.0
 	github.com/iotames/miniutils v1.0.11
 	github.com/lib/pq v1.10.9
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/iotames/easydb => ./easydb
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect

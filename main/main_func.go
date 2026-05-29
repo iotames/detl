@@ -149,8 +149,22 @@ func buildLoad() (load.Load, error) {
 	case "stdout":
 		log.Printf("输出类型: stdout  列=%v", cols)
 		return load.NewStdout(cols), nil
+	case "sql":
+		dsn := getActiveDSN()
+		if dsn == "" {
+			return nil, fmt.Errorf("SQL Load 需要有效的 DSN 配置")
+		}
+		log.Printf("输出类型: sql  驱动=%s  表=%s", DbDriver, OutputFile)
+		return load.NewSQL(load.SQLConfig{
+			Driver:      DbDriver,
+			DSN:         dsn,
+			Table:       OutputFile,
+			Mode:        TransformMode,
+			CreateTable: true,
+			BatchSize:   50,
+		}), nil
 	default:
-		return nil, fmt.Errorf("不支持的输出类型: %s（可选 csv/stdout）", LoadType)
+		return nil, fmt.Errorf("不支持的输出类型: %s（可选 csv/stdout/sql）", LoadType)
 	}
 }
 
@@ -274,8 +288,31 @@ func runETLFromTask(taskPath string) error {
 	case "stdout":
 		log.Printf("输出类型: stdout  列=%v", t.Load.Columns)
 		ld = load.NewStdout(t.Load.Columns)
+	case "sql":
+		ds, ok := cf.GetDSNByName(t.Load.Connection)
+		if !ok {
+			ds, ok = cf.GetDSNByDriver(t.Load.Connection)
+			if !ok {
+				return fmt.Errorf("SQL Load 未找到连接 %q（请检查 dsn.json）", t.Load.Connection)
+			}
+		}
+		batchSize := t.Load.BatchSize
+		if batchSize <= 0 {
+			batchSize = 50
+		}
+		log.Printf("输出类型: sql  目标=%s.%s  模式=%s  批量=%d",
+			ds.DriverName, t.Load.Table, t.Load.Mode, batchSize)
+		ld = load.NewSQL(load.SQLConfig{
+			Driver:      ds.DriverName,
+			DSN:         ds.Dsn,
+			Table:       t.Load.Table,
+			Mode:        t.Load.Mode,
+			KeyColumns:  t.Load.KeyColumns,
+			CreateTable: t.Load.CreateTable,
+			BatchSize:   batchSize,
+		})
 	default:
-		return fmt.Errorf("不支持的输出类型: %q（可选 csv/stdout）", t.Load.Type)
+		return fmt.Errorf("不支持的输出类型: %q（可选 csv/stdout/sql）", t.Load.Type)
 	}
 
 	// --- Pipeline ---

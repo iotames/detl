@@ -91,7 +91,16 @@ func (c Conf) LoadSystemConfig() SystemConfig {
 	return sysCfg
 }
 
-// GetDSNGroup 读取完整的数据源分组
+// GetDSNByName 按连接名查找数据源
+func (c Conf) GetDSNByName(name string) (pkgdsn.DataSource, bool) {
+	dgp, err := c.GetDSNGroup()
+	if err != nil {
+		return pkgdsn.DataSource{}, false
+	}
+	return dgp.GetDSNByName(name)
+}
+
+// GetDSNGroup 读取完整数据源分组（解析 dsn.json）
 func (c Conf) GetDSNGroup() (*pkgdsn.DsnGroup, error) {
 	dsnconf := pkgdsn.GetDsnConf(nil)
 	if dsnconf == nil {
@@ -104,19 +113,14 @@ func (c Conf) GetDSNGroup() (*pkgdsn.DsnGroup, error) {
 	return dgp, nil
 }
 
-// GetDSNByName 按连接名查找数据源
-func (c Conf) GetDSNByName(name string) (pkgdsn.DataSource, bool) {
-	dgp, err := c.GetDSNGroup()
-	if err != nil {
-		return pkgdsn.DataSource{}, false
-	}
-	return dgp.GetDSNByName(name)
-}
-
 // GetDSNByDriver 按驱动名查找第一个匹配的数据源（兼容旧逻辑）
 func (c Conf) GetDSNByDriver(driver string) (pkgdsn.DataSource, bool) {
-	dgp, err := c.GetDSNGroup()
-	if err != nil {
+	dsnconf := pkgdsn.GetDsnConf(nil)
+	if dsnconf == nil {
+		return pkgdsn.DataSource{}, false
+	}
+	dgp := &pkgdsn.DsnGroup{}
+	if err := dsnconf.GetDsnGroup(dgp); err != nil {
 		return pkgdsn.DataSource{}, false
 	}
 	for _, ds := range dgp.DsnList {

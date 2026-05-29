@@ -187,7 +187,7 @@ TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 |---|---|---|
 | **Source** | SQL 数据源：PostgreSQL + MySQL | ✅ 集成测试通过 |
 | **Transform** | 内置 Go 函数转换 / Python 脚本转换 | ✅ 集成测试通过 |
-| **Load** | CSV 写入 / Stdout 控制台输出 | ✅ 集成测试通过 |
+| **Load** | CSV 写入 / Stdout 控制台输出 / SQL 写入（UPSERT） | ✅ 集成测试通过 |
 | **Engine** | Pipeline 编排（Source → Transform → Load） | ✅ 集成测试通过 |
 | **配置** | 环境变量 + DSN 文件管理 + system.yaml | 基础可用 |
 | **YAML 任务** | `kind: 转换` + 按连接名引用 DSN | ✅ 编译通过 |
@@ -195,7 +195,6 @@ TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 
 ### 📋 待实现
 - 文件 Source（CSV/JSON）
-- Load：SQL 写入（UPSERT）
 - 作业执行引擎
 - HTTP API 数据源
 
@@ -258,6 +257,7 @@ detl/
 │   ├── load/
 │   │   ├── load.go                     # ✅ Load 接口
 │   │   ├── csv.go                      # ✅ CSV 写入
+│   │   ├── sql.go                      # ✅ SQL 写入（insert/upsert）
 │   │   └── stdout.go                   # ✅ 控制台输出
 │   └── task/
 │       └── task.go                     # ✅ 任务/作业 YAML 定义 + 解析

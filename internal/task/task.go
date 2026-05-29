@@ -37,9 +37,17 @@ type TransformConfig struct {
 
 // LoadConfig 输出配置
 type LoadConfig struct {
-	Type    string   `yaml:"type"`              // csv | stdout
-	File    string   `yaml:"file,omitempty"`    // 输出文件名
+	Type    string   `yaml:"type"`              // csv | stdout | sql
+	File    string   `yaml:"file,omitempty"`    // 输出文件名（csv 用）
 	Columns []string `yaml:"columns,omitempty"` // 列名顺序
+
+	// SQL Load 配置
+	Connection  string   `yaml:"connection,omitempty"`   // dsn.json 连接名
+	Table       string   `yaml:"table,omitempty"`        // 目标表（支持 schema.table）
+	Mode        string   `yaml:"mode,omitempty"`         // insert | upsert
+	KeyColumns  []string `yaml:"key_columns,omitempty"`  // upsert 唯一键
+	CreateTable bool     `yaml:"create_table,omitempty"` // 自动建表
+	BatchSize   int      `yaml:"batch_size,omitempty"`   // 每批写入行数（默认 50）
 }
 
 // JobEntry 作业中的子任务
