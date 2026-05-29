@@ -1,0 +1,20 @@
+# ETL 转换任务：MySQL 抽取 → Python 清洗 → PostgreSQL 写入
+kind: 转换
+name: 用户数据同步到 PG
+
+source:
+  connection: dev_mysql                    # 源库：MySQL
+  query_file: e_detl_users.sql
+
+transform:
+  mode: python                             # Python 脚本清洗
+  script: t_users.py
+
+load:
+  type: sql                                # 目标库：SQL 写入
+  connection: dev_pg                       # 目标连接（dsn.json 中的 Name）
+  table: staging.etl_users                 # schema.table
+  mode: upsert                             # insert | upsert
+  key_columns: [id]                        # upsert 唯一键
+  create_table: true                       # 自动建表
+  batch_size: 100                          # 每批行数

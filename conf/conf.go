@@ -2,12 +2,20 @@ package conf
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 
 	pkgdsn "github.com/iotames/easydb/dsn"
 	"github.com/iotames/miniutils"
+	"gopkg.in/yaml.v3"
 )
+
+// SystemConfig 系统配置（system.yaml），环境变量可覆盖
+type SystemConfig struct {
+	ScriptDir string `yaml:"script_dir"`
+	OutputDir string `yaml:"output_dir"`
+}
 
 var cf *Conf
 var once sync.Once
@@ -67,6 +75,56 @@ func (c Conf) InitDSN(driverName, dsn string) (dsnconf *pkgdsn.DsnConf, err erro
 		return dsnconf, err, true
 	}
 	return dsnconf, err, false
+}
+
+// LoadSystemConfig 加载 system.yaml（可选），不存在则返回零值
+func (c Conf) LoadSystemConfig() SystemConfig {
+	var sysCfg SystemConfig
+	fpath := filepath.Join(c.dirPath, "system.yaml")
+	data, err := os.ReadFile(fpath)
+	if err != nil {
+		return sysCfg
+	}
+	if err := yaml.Unmarshal(data, &sysCfg); err != nil {
+		fmt.Printf("解析 system.yaml 失败: %v\n", err)
+	}
+	return sysCfg
+}
+
+// GetDSNGroup 读取完整的数据源分组
+func (c Conf) GetDSNGroup() (*pkgdsn.DsnGroup, error) {
+	dsnconf := pkgdsn.GetDsnConf(nil)
+	if dsnconf == nil {
+		return nil, fmt.Errorf("DSN 配置未初始化")
+	}
+	dgp := &pkgdsn.DsnGroup{}
+	if err := dsnconf.GetDsnGroup(dgp); err != nil {
+		return nil, fmt.Errorf("读取 DSN 配置失败: %w", err)
+	}
+	return dgp, nil
+}
+
+// GetDSNByName 按连接名查找数据源
+func (c Conf) GetDSNByName(name string) (pkgdsn.DataSource, bool) {
+	dgp, err := c.GetDSNGroup()
+	if err != nil {
+		return pkgdsn.DataSource{}, false
+	}
+	return dgp.GetDSNByName(name)
+}
+
+// GetDSNByDriver 按驱动名查找第一个匹配的数据源（兼容旧逻辑）
+func (c Conf) GetDSNByDriver(driver string) (pkgdsn.DataSource, bool) {
+	dgp, err := c.GetDSNGroup()
+	if err != nil {
+		return pkgdsn.DataSource{}, false
+	}
+	for _, ds := range dgp.DsnList {
+		if ds.DriverName == driver {
+			return ds, true
+		}
+	}
+	return pkgdsn.DataSource{}, false
 }
 
 func (c Conf) SetActiveDSN(driverName, dsn string) error {

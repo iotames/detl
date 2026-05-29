@@ -8,11 +8,13 @@
 - **转换**：内置 Go 函数 或 **Python 脚本**
 - **载入**：CSV 文件、控制台输出等
 
+两种运行模式：**传统模式**（环境变量驱动）和**任务模式**（YAML 任务文件驱动）。系统配置与 ETL 业务配置分离。
+
 ---
 
 ## Hello ETL：MySQL → 清洗转换 → CSV
 
-完整的 ETL 流程，通过**环境变量和配置文件**驱动，无需改一行源代码。
+完整的 ETL 流程，支持**环境变量**和 **YAML 任务文件**两种驱动方式，无需改一行源代码。
 
 ### 流程概览
 
@@ -35,16 +37,18 @@ go test -v -run TestPipeline_MySQL_to_CSV   # 建表并插入数据
 
 ### 1. 配置数据源
 
-`main/conf/dsn.json` 支持多数据源，程序根据 `DB_DRIVER` 自动选择：
+`main/conf/dsn.json` 支持多数据源，每个连接有唯一的 `Name` 供 ETL 任务引用：
 
 ```json
 {
   "DsnList": [
-    {"DriverName": "postgres", "Dsn": "user=postgres ..."},
-    {"DriverName": "mysql",    "Dsn": "root:root@tcp(127.0.0.1:3306)/detl_test?charset=utf8mb4"}
+    {"Name": "dev_pg", "DriverName": "postgres", "Dsn": "user=postgres ..."},
+    {"Name": "dev_mysql", "DriverName": "mysql", "Dsn": "root:root@tcp(127.0.0.1:3306)/detl_test?charset=utf8mb4"}
   ]
 }
 ```
+
+传统模式下程序根据 `DB_DRIVER` 自动选择；任务模式下通过 `source.connection` 按 `Name` 引用。
 
 ### 2. 编写抽取脚本
 
@@ -79,9 +83,31 @@ CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=mysql LOAD_TYPE=stdout ./mai
 CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=mysql TRANSFORM_MODE=none ./main.exe
 ```
 
-### 5. 输出结果
+### 5. 任务模式运行
 
-`output/etl_output.csv`：
+上述流程也可通过 YAML 任务文件驱动，系统配置与 ETL 业务配置分离：
+
+```bash
+go run ./main -task main/task/user_etl.yaml
+```
+
+任务文件 `main/task/user_etl.yaml`：
+
+```yaml
+kind: 转换
+name: 用户数据清洗
+source:
+  connection: dev_mysql           # 按连接名引用 dsn.json
+  query_file: e_detl_users.sql
+transform:
+  mode: builtin
+load:
+  type: csv
+  file: etl_output.csv
+  columns: [id, full_name, email, age, created_at, source, etl_time]
+```
+
+### 6. 输出结果
 
 ```csv
 id,full_name,email,age,created_at,source,etl_time
@@ -136,7 +162,7 @@ TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 
 | 模块 | 环境变量 | 默认值 | 说明 |
 |---|---|---|---|
-| **Source** | `CONF_DIR` | `conf` | 配置目录（存放 dsn.json） |
+| **Source** | `CONF_DIR` | `conf` | 配置目录（存放 dsn.json + system.yaml） |
 | | `SCRIPT_DIR` | `script` | ETL 脚本目录 |
 | | `DB_DRIVER` | `postgres` | 数据库驱动（`postgres` / `mysql`） |
 | | `SCRIPT_FILE` | `e_detl_users.sql` | 抽取脚本文件名 |
@@ -147,6 +173,8 @@ TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 | | `OUTPUT_DIR` | `output` | 输出目录 |
 | | `OUTPUT_FILE` | `etl_output.csv` | 输出文件名 |
 | | `OUTPUT_COLUMNS` | `id,full_name,...` | CSV 列名（逗号分隔） |
+| **Task** | `TASK_DIR` | `task` | ETL 任务 YAML 目录 |
+| | `-task` flag | — | 指定任务文件，启用任务模式 |
 
 ---
 
@@ -161,13 +189,14 @@ TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 | **Transform** | 内置 Go 函数转换 / Python 脚本转换 | ✅ 集成测试通过 |
 | **Load** | CSV 写入 / Stdout 控制台输出 | ✅ 集成测试通过 |
 | **Engine** | Pipeline 编排（Source → Transform → Load） | ✅ 集成测试通过 |
-| **配置** | 环境变量 + 命令行 + DSN 文件管理 | 基础可用 |
+| **配置** | 环境变量 + DSN 文件管理 + system.yaml | 基础可用 |
+| **YAML 任务** | `kind: 转换` + 按连接名引用 DSN | ✅ 编译通过 |
+| **作业设计** | `kind: 作业` 结构预留 | ✅ 设计完成 |
 
 ### 📋 待实现
 - 文件 Source（CSV/JSON）
 - Load：SQL 写入（UPSERT）
-- CLI 命令行工具（`-task`, `-dir`）
-- YAML/JSON 任务定义
+- 作业执行引擎
 - HTTP API 数据源
 
 ---
@@ -183,24 +212,33 @@ TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py ./main.exe
 
 整体采用 **Pipeline 管道架构**：`Source → Transform → Load`。
 
+系统配置（环境变量 + system.yaml）与 ETL 业务配置（YAML 任务文件）分离。
+
 ```
                      ┌─────────────────────────────────┐
-                     │          CLI / 配置层            │
-                     │   (环境变量, JSON/YAML 任务)      │
-                     └──────────┬──────────────────────┘
-                                │
-                     ┌──────────▼──────────────────────┐
-                     │          Pipeline Engine         │
+                     │      CLI / 配置层                │
+                     │  环境变量 | system.yaml | dsn.json│
                      └──────────┬──────────────────────┘
                                 │
               ┌─────────────────┼──────────────────┐
-              ▼                 ▼                   ▼
+              ▼                 ▼                    ▼
+     ┌────────────────┐ ┌──────────────┐ ┌──────────────────┐
+     │  任务 YAML     │ │  dsn.json    │ │  system.yaml     │
+     │  kind: 转换/作业│ │  连接名→DSN   │ │  系统默认配置     │
+     └────────┬───────┘ └──────┬───────┘ └──────────────────┘
+              │                │
+              ▼                ▼
+     ┌──────────▼──────────────────────┐
+     │          Pipeline Engine         │
+     └──────────┬──────────────────────┘
+                │
+              ┌─┼─┐
+              ▼ ▼ ▼
      ┌────────────────┐ ┌──────────────┐ ┌────────────────┐
      │     Source     │ │  Transform   │ │      Load      │
      ├────────────────┤ ├──────────────┤ ├────────────────┤
      │ • SQL (PG/MySQL)│ │ • 内置 Func  │ │ • CSV 文件     │
-     │ • CSV/JSON 文件 │ │ • Py 脚本   │ │ • SQL (UPSERT) │
-     │ • HTTP API     │ │              │ │ • 控制台输出    │
+     │                │ │ • Py 脚本   │ │ • 控制台输出    │
      └────────────────┘ └──────────────┘ └────────────────┘
 ```
 
@@ -213,30 +251,35 @@ detl/
 │   │   └── pipeline.go                 # ✅ Pipeline 编排
 │   ├── source/
 │   │   ├── source.go                   # ✅ Source 接口
-│   │   ├── sql.go                      # ✅ SQL 数据源（PG + MySQL）
-│   │   └── file.go                     # 📋 待实现
+│   │   └── sql.go                      # ✅ SQL 数据源（PG + MySQL）
 │   ├── transform/
 │   │   ├── transform.go                # ✅ Transformer 接口 + Func 适配器
 │   │   └── pyscript.go                 # ✅ Python 脚本转换
 │   ├── load/
 │   │   ├── load.go                     # ✅ Load 接口
 │   │   ├── csv.go                      # ✅ CSV 写入
-│   │   ├── stdout.go                   # ✅ 控制台输出
-│   │   └── sql.go                      # 📋 待实现
-│   └── config/                         # 📋 待实现
-├── cmd/detl/main.go                    # 📋 待实现
-├── conf/                               # 运行时配置
-├── script/                             # ETL 业务脚本
-├── main/                               # 当前入口
-│   ├── main.go                         # ✅ 程序入口
-│   ├── main_func.go                    # ✅ ETL 编排
-│   ├── conf/dsn.json                   # 🔒 本地 DSN 配置
-│   └── script/                         # 🔒 本地脚本
+│   │   └── stdout.go                   # ✅ 控制台输出
+│   └── task/
+│       └── task.go                     # ✅ 任务/作业 YAML 定义 + 解析
+├── conf/
+│   └── conf.go                         # ✅ 配置单例 + DSN 管理 + system.yaml
+├── main/                               # 程序入口
+│   ├── main.go                         # ✅ 程序入口（支持 -task flag）
+│   ├── main_func.go                    # ✅ ETL 编排（传统 + 任务模式）
+│   ├── conf/
+│   │   ├── dsn.json                    # 🔒 数据源配置（按 Name 引用）
+│   │   └── system.yaml                 # 🔒 系统默认配置（可选）
+│   ├── script/                         # 🔒 SQL + Python 脚本
+│   └── task/                           # 🔒 ETL 任务 YAML 文件
+│       ├── user_etl.yaml               # 转换示例
+│       ├── user_etl_stdout.yaml        # stdout 输出示例
+│       └── daily_job.yaml              # 作业示例（预留）
 ├── detl_test.go                        # ✅ 集成测试
 ├── output/                             # 输出文件
 ├── go.mod
-├── AGENTS.md
-└── README.md
+├── CLAUDE.md
+├── README.md
+└── usage.md
 ```
 
 ---
@@ -259,6 +302,16 @@ type Load interface {
     Write(map[string]any) error
     Close() error
 }
+
+// YAML 任务定义（internal/task/task.go）
+type TaskConfig struct {
+    Kind      string           // "转换" 或 "作业"
+    Name      string
+    Source    *SourceConfig
+    Transform *TransformConfig
+    Load      *LoadConfig
+    Tasks     []JobEntry       // 作业子任务
+}
 ```
 
 ---
@@ -272,8 +325,10 @@ type Load interface {
 | 3 | 实现 Load：CSV / Stdout | 文件输出 + 控制台 | ✅ |
 | 4 | 实现 Transform Func 适配器 | 内置 Go 函数转换 | ✅ |
 | 5 | 实现 Transform Python 脚本引擎 | Python 脚本转换 | ✅ |
-| 6 | 修复配置系统 Bug | 修复 `GetConf("")` 重复调用 | 📋 |
-| 7 | 实现 Load：SQL（UPSERT）| 数据库写入 | 📋 |
-| 8 | 实现文件 Source/Load（CSV、JSON）| 文件数据源 | 📋 |
-| 9 | 实现 YAML 任务定义 + CLI 编排 | 可用性提升 | 📋 |
-| 10 | 完整的测试覆盖 | 保证质量 | 📋 |
+| 6 | YAML 任务定义 + 按名引用 DSN | ETL 业务与系统配置分离 | ✅ |
+| 7 | system.yaml 混合配置 | 系统配置支持文件+环境变量覆盖 | ✅ |
+| 8 | 作业结构预留 | 多转换集合接口设计 | ✅ |
+| 9 | 实现 Load：SQL（UPSERT）| 数据库写入 | 📋 |
+| 10 | 实现文件 Source/Load（CSV、JSON）| 文件数据源 | 📋 |
+| 11 | 作业执行引擎 | 多转换编排执行 | 📋 |
+| 12 | 完整的测试覆盖 | 保证质量 | 📋 |

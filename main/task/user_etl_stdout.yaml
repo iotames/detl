@@ -1,0 +1,21 @@
+# ETL 转换任务：用户数据 → 控制台输出
+kind: 转换
+name: 用户数据控制台输出
+
+source:
+  connection: dev_pg
+  query_file: e_detl_users.sql
+
+transform:
+  mode: builtin
+
+load:
+  type: stdout
+  columns:
+    - id
+    - full_name
+    - email
+    - age
+    - created_at
+    - source
+    - etl_time

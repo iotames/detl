@@ -1,5 +1,4 @@
 go.sum
-easydb/
 .env
 default.env
 *.exe

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/iotames/detl/internal/engine"
 	"github.com/iotames/detl/internal/load"
 	"github.com/iotames/detl/internal/source"
+	"github.com/iotames/detl/internal/task"
 	"github.com/iotames/detl/internal/transform"
 	pkgdsn "github.com/iotames/easydb/dsn"
 	_ "github.com/go-sql-driver/mysql"
@@ -188,6 +190,118 @@ func runETL() error {
 		fmt.Printf("输出文件: %s\n", outPath)
 	}
 	return nil
+}
+
+// runETLFromTask 从 YAML 任务文件执行 ETL
+func runETLFromTask(taskPath string) error {
+	taskPath = resolveTaskPath(taskPath, cf.GetScriptDir())
+	t, err := task.LoadTask(taskPath)
+	if err != nil {
+		return err
+	}
+	log.Printf("加载任务: kind=%s  name=%s  file=%s", t.Kind, t.Name, taskPath)
+
+	if t.IsJob() {
+		// 作业：预留，列出子任务但不执行
+		log.Printf("作业 %q 包含 %d 个子任务:", t.Name, len(t.Tasks))
+		for _, entry := range t.Tasks {
+			log.Printf("  - %s", entry.Task)
+		}
+		return fmt.Errorf("作业执行尚未实现，请单独运行转换任务")
+	}
+
+	if t.Source == nil || t.Load == nil {
+		return fmt.Errorf("转换任务必须包含 source 和 load 配置")
+	}
+
+	// --- Source ---
+	ds, ok := cf.GetDSNByName(t.Source.Connection)
+	if !ok {
+		// 回退：按驱动名查找（兼容无 Name 的旧 dsn.json）
+		ds, ok = cf.GetDSNByDriver(t.Source.Connection)
+		if !ok {
+			return fmt.Errorf("未找到连接 %q（请检查 dsn.json）", t.Source.Connection)
+		}
+		log.Printf("按驱动名回退匹配到连接: %s", ds.DriverName)
+	}
+
+	sqlText := t.Source.Query
+	if sqlText == "" && t.Source.QueryFile != "" {
+		sqlText = getSQLText(t.Source.QueryFile)
+	}
+	if sqlText == "" {
+		return fmt.Errorf("source 未指定 query 或 query_file")
+	}
+
+	log.Printf("Source: 连接=%s  驱动=%s", t.Source.Connection, ds.DriverName)
+	src := source.NewSQL(source.SQLConfig{
+		Driver: ds.DriverName,
+		DSN:    ds.Dsn,
+		Query:  sqlText,
+	})
+
+	// --- Transform ---
+	var tf transform.Transformer
+	if t.Transform != nil {
+		switch t.Transform.Mode {
+		case "none":
+			log.Printf("转换模式: none（透传原始数据）")
+		case "python":
+			scriptPath := cf.GetScriptFilePath(t.Transform.Script)
+			log.Printf("转换模式: python  脚本=%s", scriptPath)
+			tf = transform.NewPython(transform.PythonConfig{
+				ScriptPath: scriptPath,
+			})
+		default:
+			log.Printf("转换模式: builtin（内置清洗）")
+			tf = builtinTransform()
+		}
+	}
+
+	// --- Load ---
+	var ld load.Load
+	switch t.Load.Type {
+	case "csv":
+		outPath := t.Load.File
+		if !filepath.IsAbs(outPath) {
+			outPath = filepath.Join(OutputDir, outPath)
+		}
+		log.Printf("输出类型: csv  路径=%s  列=%v", outPath, t.Load.Columns)
+		ld = load.NewCSV(load.CSVConfig{
+			Path:    outPath,
+			Columns: t.Load.Columns,
+		})
+	case "stdout":
+		log.Printf("输出类型: stdout  列=%v", t.Load.Columns)
+		ld = load.NewStdout(t.Load.Columns)
+	default:
+		return fmt.Errorf("不支持的输出类型: %q（可选 csv/stdout）", t.Load.Type)
+	}
+
+	// --- Pipeline ---
+	p := engine.New(src, tf, ld)
+	if err := p.Run(); err != nil {
+		return fmt.Errorf("ETL 执行失败: %w", err)
+	}
+
+	if t.Load.Type == "csv" {
+		log.Printf("输出文件: %s", t.Load.File)
+	}
+	return nil
+}
+
+// resolveTaskPath 解析任务文件路径。
+// 优先级：绝对路径 → 相对路径（存在即用）→ SCRIPT_DIR 下查找
+func resolveTaskPath(taskFile, scriptDir string) string {
+	if filepath.IsAbs(taskFile) {
+		return taskFile
+	}
+	// 相对路径：当前目录存在则直接用
+	if _, err := os.Stat(taskFile); err == nil {
+		return taskFile
+	}
+	// 回退到 SCRIPT_DIR
+	return filepath.Join(scriptDir, taskFile)
 }
 
 func toLower(s string) string {

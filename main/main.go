@@ -25,9 +25,26 @@ var (
 	OutputDir      string
 	OutputFile     string
 	OutputColumns  string
+
+	// Task 模式
+	TaskFile string
+	TaskDir  string
 )
 
 func main() {
+	flag.Parse()
+	// 兼容旧版：第二次 GetConf 不改变单例，仅为了与旧版顺序一致
+	cf = conf.GetConf("")
+	fmt.Println("GetScriptDir:", cf.GetScriptDir())
+	cf.InitDSN(DbDriver, ActiveDsn)
+
+	if TaskFile != "" {
+		err := runETLFromTask(TaskFile)
+		if err != nil {
+			panic(fmt.Errorf("runETLFromTask:%s", err))
+		}
+		return
+	}
 	err := runETL()
 	if err != nil {
 		panic(fmt.Errorf("runETL:%s", err))
@@ -55,12 +72,10 @@ func init() {
 	env.StringVar(&OutputFile, "OUTPUT_FILE", "etl_output.csv", "输出文件名")
 	env.StringVar(&OutputColumns, "OUTPUT_COLUMNS", "id,full_name,email,age,created_at,source,etl_time", "CSV列名(逗号分隔)")
 
+	env.StringVar(&TaskDir, "TASK_DIR", "task", "ETL任务目录")
 	env.Parse()
 	cf = conf.GetConf(ConfDir)
 	cf.SetScriptDir(ScriptDir)
 	flag.StringVar(&Version, "version", "unstable", "显示版本信息")
-	flag.Parse()
-	cf = conf.GetConf("")
-	fmt.Println("GetScriptDir:", cf.GetScriptDir())
-	cf.InitDSN(DbDriver, ActiveDsn)
+	flag.StringVar(&TaskFile, "task", "", "ETL任务文件（YAML），启用任务模式")
 }

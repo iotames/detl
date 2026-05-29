@@ -1,0 +1,23 @@
+# ETL 转换任务：用户数据抽取 → 清洗 → CSV 输出
+kind: 转换
+name: 用户数据清洗
+
+source:
+  connection: dev_pg                       # 引用 dsn.json 中的连接名
+  query_file: e_detl_users.sql             # SCRIPT_DIR 下的 SQL 文件
+
+transform:
+  mode: builtin                            # builtin | python | none
+  # script: t_users.py                     # mode=python 时生效
+
+load:
+  type: csv                                # csv | stdout
+  file: etl_output.csv                     # 输出文件名（相对于 OUTPUT_DIR）
+  columns:
+    - id
+    - full_name
+    - email
+    - age
+    - created_at
+    - source
+    - etl_time
