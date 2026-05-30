@@ -6,34 +6,18 @@
 - **转换**：内置 Go 函数 或 **Python 脚本**
 - **载入**：CSV 文件、控制台输出、SQL 写入（insert/upsert）
 
-两种运行模式：**传统模式**（环境变量驱动）和**任务模式**（YAML 任务文件驱动）。
-
 ---
 
-## 安装
-
-### 方式一：go install（推荐）
+## 编译 / 测试 / 安装
 
 ```bash
-go install ./cmd/detl
-```
+# 本地编译
+cd cmd/detl && go build .
 
-安装到 `$GOPATH/bin/detl.exe`（若 `$GOPATH/bin` 在 PATH 中，可直接运行 `detl.exe`）。
-
-### 方式二：本地编译
-
-```bash
-go build -o ./bin/detl.exe ./cmd/detl
-./bin/detl.exe -task ...
-```
-
-### 运行测试
-
-```bash
-# PG 集成测试（需要 PG localhost:5432, user=postgres, password=postgres）
+# 运行测试（需要 PG localhost:5432, user=postgres, password=postgres）
 go test -v -run TestPipeline_PG_to_CSV
 
-# MySQL 集成测试（需要 MySQL localhost:3306, root:root）
+# MySQL 测试（需要 MySQL localhost:3306, root:root）
 go test -v -run TestPipeline_MySQL_to_CSV
 
 # 全部测试
@@ -41,49 +25,57 @@ go test -v ./...
 
 # 代码检查
 go vet ./...
+
+# 安装到 $GOPATH/bin
+go install ./cmd/detl
+```
+
+安装后若 `$GOPATH/bin` 在 PATH 中，可直接执行 `detl.exe`。
+
+```bash
+# 安装演示数据工具
+go install ./cmd/seed
 ```
 
 ---
 
-## Hello ETL：MySQL → 清洗转换 → CSV
-
-完整的 ETL 流程，无需改一行源代码。
-
-### 流程概览
+## 目录结构
 
 ```
-MySQL(detl_test.detl_test_users)  ← conf/dsn.json
-    │ 抽取：e_detl_users.sql       ← script/
-    ▼
-Transform（内置 或 Python 脚本）   ← t_users.py
-    │
-    ▼
-CSV 文件（output/etl_output.csv）
+├── conf/           # 数据源配置（dsn.json）
+├── script/         # ETL 脚本（SQL + Python）
+└── task/           # ETL 任务 YAML 定义
 ```
 
-### 前置准备
+`conf/`、`script/`、`task/` 中的文件为示例，可复制到工作目录后按需修改。
 
-```bash
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS detl_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-go test -v -run TestPipeline_MySQL_to_CSV   # 建表并插入数据
-```
+---
 
-### 1. 配置数据源
+## 快速开始：用户表 ETL
 
-`conf/dsn.json` 支持多数据源，每个连接有唯一的 `Name` 供 ETL 任务引用：
+完整 ETL 流程：MySQL → 清洗转换 → CSV。
+
+### 1. 准备数据源
+
+`conf/dsn.json` 定义数据源连接：
 
 ```json
 {
   "DsnList": [
-    {"Name": "dev_pg", "DriverName": "postgres", "Dsn": "user=postgres ..."},
-    {"Name": "dev_mysql", "DriverName": "mysql", "Dsn": "root:root@tcp(127.0.0.1:3306)/detl_test?charset=utf8mb4"}
+    {"Name": "dev_mysql", "DriverName": "mysql", "Dsn": "root:root@tcp(127.0.0.1:3306)/detl_test?charset=utf8mb4"},
+    {"Name": "dev_pg", "DriverName": "postgres", "Dsn": "user=postgres password=postgres dbname=detl_test sslmode=disable"}
   ]
 }
 ```
 
-传统模式下程序根据 `DB_DRIVER` 自动选择；任务模式下通过 `source.connection` 按 `Name` 引用。
+### 2. 创建测试数据
 
-### 2. 编写抽取脚本
+```bash
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS detl_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+go test -v -run TestPipeline_MySQL_to_CSV
+```
+
+### 3. 编写抽取脚本
 
 `script/e_detl_users.sql`：
 
@@ -93,40 +85,9 @@ FROM detl_test_users
 ORDER BY id
 ```
 
-### 3. 安装并运行
+### 4. 定义 ETL 任务
 
-```bash
-# 安装到 $GOPATH/bin
-go install ./cmd/detl
-
-# Windows（如果 $GOPATH/bin 在 PATH 中）
-CONF_DIR=conf SCRIPT_DIR=script DB_DRIVER=mysql SCRIPT_FILE=e_detl_users.sql detl.exe
-
-# Linux/Mac（如果 $GOPATH/bin 在 PATH 中）
-CONF_DIR=conf SCRIPT_DIR=script DB_DRIVER=mysql SCRIPT_FILE=e_detl_users.sql detl
-
-# 或本地编译后直接运行
-go build -o ./bin/detl.exe ./cmd/detl
-CONF_DIR=conf SCRIPT_DIR=script DB_DRIVER=mysql SCRIPT_FILE=e_detl_users.sql ./bin/detl.exe
-```
-
-### 4. 切换输出方式
-
-```bash
-# 控制台输出
-CONF_DIR=conf SCRIPT_DIR=script DB_DRIVER=mysql LOAD_TYPE=stdout detl.exe
-
-# 透传原始数据（不转换）
-CONF_DIR=conf SCRIPT_DIR=script DB_DRIVER=mysql TRANSFORM_MODE=none detl.exe
-```
-
-### 5. 任务模式运行
-
-```bash
-detl.exe -task task/user_etl.yaml
-```
-
-任务文件 `task/user_etl.yaml`：
+`task/user_etl.yaml`：
 
 ```yaml
 kind: 转换
@@ -142,138 +103,187 @@ load:
   columns: [id, full_name, email, age, created_at, source, etl_time]
 ```
 
-### 6. 输出结果
+### 5. 运行
+
+```bash
+detl.exe -task user_etl.yaml
+```
+
+输出文件在 `output/etl_output.csv`：
 
 ```csv
 id,full_name,email,age,created_at,source,etl_time
 1,John Doe,john@example.com,30,2024-01-15,mysql,2026-05-26 19:10:30
 2,Jane Smith,jane@example.com,25,2024-02-20,mysql,2026-05-26 19:10:30
-3,Bob,bob@test.com,0,2024-03-10,mysql,2026-05-26 19:10:30
-4,Alice Wang,alice.wang@test.com,28,2024-04-05,mysql,2026-05-26 19:10:30
-5,Lee,null_first@example.com,35,2024-05-01,mysql,2026-05-26 19:10:30
+```
+
+### 切换输出方式
+
+```yaml
+# 控制台输出
+load:
+  type: stdout
+  columns: [id, full_name, email]
+```
+
+```yaml
+# SQL 写入（upsert）
+load:
+  type: sql
+  file: etl_output       # 目标表名
+  mode: upsert
+  keys: [id]
+```
+
+---
+
+## 实战：商品表 ETL（MySQL → Python → PostgreSQL）
+
+完整链路：MySQL 抽取商品数据 → Python 脚本转换 → PostgreSQL upsert 写入。
+
+### 1. 准备演示数据
+
+`seed` 命令自动读取 `conf/dsn.json`，创建 PG 目标表并填充 MySQL 演示数据：
+
+```bash
+# PG 目标建表
+seed -pg
+
+# MySQL 填充 300 条商品演示数据
+seed
+
+# 自定义数量
+seed -count 500
+```
+
+### 2. 抽取脚本
+
+`script/get_products.sql`：
+
+```sql
+SELECT id, title, category_id, price, stock, description, status, is_deleted, created_at, updated_at
+FROM etl_test_product
+WHERE is_deleted = 0
+ORDER BY id
+```
+
+### 3. Python 转换脚本
+
+`script/t_product.py` 负责字段映射（MySQL 单 title → PG 三标题）、价格翻倍等。核心逻辑：
+
+```python
+import sys, json
+
+PRICE_MULTIPLIER = 2.0
+
+def transform_row(row):
+    title_cn = str(row.get("title") or row.get("title_cn") or "")
+    price = round(float(row.get("price", 0) or 0) * PRICE_MULTIPLIER, 2)
+    return {
+        "id": row.get("id"),
+        "title_cn": title_cn,
+        "title_en": "",           # 可扩展英文映射
+        "title": title_cn,
+        "category_id": int(row.get("category_id", 0) or 0),
+        "price": price,
+        "stock": int(row.get("stock", 0) or 0),
+        "description": str(row.get("description", "") or ""),
+        "status": int(row.get("status", 1) or 1),
+        "is_deleted": int(row.get("is_deleted", 0) or 0),
+        "created_at": str(row.get("created_at", "")),
+        "updated_at": str(row.get("updated_at", "")),
+    }
+
+for line in sys.stdin:
+    row = json.loads(line.strip())
+    print(json.dumps(transform_row(row), ensure_ascii=False), flush=True)
+```
+
+### 4. 定义 ETL 任务
+
+`task/product_sync_to_pg.yaml`：
+
+```yaml
+kind: 转换
+name: 商品数据同步到 PG
+source:
+  connection: mysql8_local
+  query_file: get_products.sql
+transform:
+  mode: python
+  script: t_product.py
+load:
+  type: sql
+  connection: pg2              # 目标数据源 Name
+  table: debug.etl_test_product # schema.table
+  mode: upsert                 # 重复则更新
+  key_columns: [id]
+  create_table: false
+  batch_size: 50
+```
+
+### 5. 运行
+
+```bash
+# 先控制台输出快速验证 Python 脚本
+detl -task task/product_mysql_stdout.yaml
+
+# 确认无误后写入 PG
+detl -task task/product_sync_to_pg.yaml
+```
+
+SQL Load 每批写入 50 行，`upsert` 模式保证幂等性——重复运行也不会产生重复数据。
+
+### 调试用 YAML 变体
+
+```yaml
+# MySQL → stdout（快速验证 Python 脚本）
+source:
+  connection: mysql8_local
+  query_file: get_products.sql
+transform:
+  mode: python
+  script: t_product.py
+load:
+  type: stdout
+  columns: [id, title_cn, title_en, title, price, stock, category_id, status]
+```
+
+```yaml
+# PG → stdout（独立测试，不依赖 MySQL）
+source:
+  connection: pg2
+  query_file: get_pg_products.sql
+transform:
+  mode: python
+  script: t_product.py
+load:
+  type: stdout
+  columns: [id, title_cn, title_en, title, price, stock, category_id, status]
 ```
 
 ---
 
 ## Python 脚本转换
 
-`TRANSFORM_MODE=python` 会启动一个常驻 Python 子进程，逐行读取数据、逐行输回转换结果。
+`TRANSFORM_MODE=python` 会启动一个常驻 Python 子进程，通过 stdin/stdout 传递 JSON 行，逐行读写。
 
 ### 脚本规范
 
-- 语言：Python 3
 - 输入：stdin，每行一个 JSON 对象
 - 输出：stdout，每行一个 JSON 对象
 - 返回 `null` 或空行可跳过该行
 - **必须 flush stdout**（`print(..., flush=True)`）
 
-### 示例：`script/t_users.py`
-
-```python
-import sys, json
-
-for line in sys.stdin:
-    row = json.loads(line.strip())
-
-    first = row.get("first_name") or ""
-    last = row.get("last_name") or ""
-    row["full_name"] = f"{first} {last}".strip()
-    row["email"] = (row.get("email") or "").lower()
-    if row.get("age") is None:
-        row["age"] = 0
-
-    print(json.dumps(row), flush=True)
-```
-
-### 运行
-
-```bash
-TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py detl.exe
+```yaml
+transform:
+  mode: python
+  script: t_product.py
 ```
 
 ---
 
-## 架构
-
-Pipeline 管道模式：**Source → Transform → Load**
-
-```
-                     ┌─────────────────────────────────┐
-                     │      CLI / 配置层                │
-                     │  环境变量 | system.yaml | dsn.json│
-                     └──────────┬──────────────────────┘
-                                │
-              ┌─────────────────┼──────────────────┐
-              ▼                 ▼                    ▼
-     ┌────────────────┐ ┌──────────────┐ ┌──────────────────┐
-     │  任务 YAML     │ │  dsn.json    │ │  system.yaml     │
-     │  kind: 转换/作业│ │  连接名→DSN   │ │  系统默认配置     │
-     └────────┬───────┘ └──────┬───────┘ └──────────────────┘
-              │                │
-              ▼                ▼
-     ┌──────────▼──────────────────────┐
-     │          Pipeline Engine         │
-     └──────────┬──────────────────────┘
-                │
-              ┌─┼─┐
-              ▼ ▼ ▼
-     ┌────────────────┐ ┌──────────────┐ ┌────────────────┐
-     │     Source     │ │  Transform   │ │      Load      │
-     ├────────────────┤ ├──────────────┤ ├────────────────┤
-     │ • SQL (PG/MySQL)│ │ • 内置 Func  │ │ • CSV 文件     │
-     │                │ │ • Py 脚本   │ │ • 控制台输出    │
-     │                │ │ • none(透传) │ │ • SQL insert   │
-     └────────────────┘ └──────────────┘ │   / upsert     │
-                                         └────────────────┘
-```
-
-### 包结构
-
-```
-detl/
-├── cmd/detl/                          # 程序入口（package main）
-│   ├── main.go                        # CLI 入口：flag/env 解析
-│   ├── main_func.go                   # ETL 编排（传统 + 任务模式）
-│   ├── main_func_test.go              # 工具函数测试
-│   ├── conf/                          # 示例配置（用户可按需修改）
-│   │   ├── dsn.json                   # 数据源连接配置
-│   │   └── system.yaml                # 系统默认配置
-│   ├── script/                        # 示例 ETL 脚本（SQL + Python）
-│   └── task/                          # 示例 ETL 任务 YAML
-├── conf/conf.go                       # 配置单例 + DSN 管理 + system.yaml
-├── internal/
-│   ├── engine/pipeline.go             # Pipeline 编排
-│   ├── source/                        # 数据抽取（SQL: PG + MySQL）
-│   ├── transform/                     # 数据转换（Func + Python）
-│   ├── load/                          # 数据载入（CSV + Stdout + SQL）
-│   └── task/task.go                   # 任务/作业 YAML 定义 + 解析
-├── output/                            # 输出文件
-├── SKILL.md                           # AI Agent 技能文档
-├── CLAUDE.md                          # AI 辅助开发指南
-└── README.md
-```
-
-### 核心接口
-
-```go
-type Source interface {
-    Open() error
-    Read() (map[string]any, bool)
-    Close() error
-}
-
-type Transformer interface {
-    Transform(map[string]any) ([]map[string]any, error)
-}
-
-type Load interface {
-    Open() error
-    Write(map[string]any) error
-    Close() error
-}
-```
-
-### 环境变量大全
+## 环境变量大全（暂未充分测试）
 
 | 模块 | 变量 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -293,32 +303,9 @@ type Load interface {
 
 ---
 
-## 实现状态
-
-### 已实现
-
-| 模块 | 内容 | 测试 |
-|------|------|------|
-| **Source** | SQL 数据源：PostgreSQL + MySQL | 集成测试通过 |
-| **Transform** | 内置 Go 函数转换 / Python 脚本转换 | 集成测试通过 |
-| **Load** | CSV 写入 / Stdout 控制台输出 / SQL 写入（insert/upsert） | 集成测试通过 |
-| **Engine** | Pipeline 编排（Source → Transform → Load） | 集成测试通过 |
-| **配置** | 环境变量 + DSN 文件管理 + system.yaml | 基础可用 |
-| **YAML 任务** | `kind: 转换` + 按连接名引用 DSN | 编译通过 |
-| **作业设计** | `kind: 作业` 结构预留 | 设计完成 |
-
-### 待实现
-
-- 文件 Source（CSV/JSON）
-- 作业执行引擎
-- HTTP API 数据源
-
----
-
 ## 注意事项
 
-- `cmd/detl/conf/` 和 `cmd/detl/script/` 是示例配置，用户可复制到工作目录后直接修改
-- 任务模式与传统模式互斥
+- `cmd/detl/conf/`、`cmd/detl/script/`、`cmd/detl/task/` 是示例目录，可复制到工作目录后修改
 - `builtin` 转换为硬编码示例（针对 `detl_test_users` 表），非通用实现
 - 作业（`kind: 作业`）执行引擎尚未实现
 - SQL Load 自动建表时所有列使用 TEXT 类型

@@ -1,6 +1,0 @@
-id,full_name,email,age,created_at,source,etl_time
-1,John Doe,john@example.com,30,2024-01-15,python,2026-05-26 19:10:30
-2,Jane Smith,jane@example.com,25,2024-02-20,python,2026-05-26 19:10:30
-3,Bob,bob@test.com,0,2024-03-10,python,2026-05-26 19:10:30
-4,Alice Wang,alice.wang@test.com,28,2024-04-05,python,2026-05-26 19:10:30
-5,Lee,null_first@example.com,35,2024-05-01,python,2026-05-26 19:10:30

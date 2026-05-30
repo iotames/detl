@@ -3,6 +3,7 @@ package engine
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/iotames/detl/internal/load"
 	"github.com/iotames/detl/internal/source"
@@ -34,6 +35,7 @@ func (p *Pipeline) Run() error {
 	defer p.load.Close()
 
 	var rowCount int
+	var errCount int
 	for {
 		row, ok := p.source.Read()
 		if !ok {
@@ -45,7 +47,9 @@ func (p *Pipeline) Run() error {
 		if p.transformer != nil {
 			rows, err = p.transformer.Transform(row)
 			if err != nil {
+				errCount++
 				// 转换失败跳过当前行
+				log.Printf("转换失败第%d个：%v\n", errCount, err)
 				continue
 			}
 		} else {
