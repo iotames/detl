@@ -3,3 +3,4 @@ easydb/
 .env
 default.env
 *.exe
+bin/

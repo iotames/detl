@@ -2,42 +2,18 @@
 
 ## 简介
 
-detl 是一个 Go 编写的 ETL 命令行工具，支持从 MySQL/PostgreSQL 抽取数据，经过内置函数或 Python 脚本转换，最终写入 CSV 文件、控制台或目标数据库。
+detl 是一个 ETL 命令行工具，从 MySQL/PostgreSQL 抽取数据，经过内置函数或 Python 脚本转换，写入 CSV、控制台或目标数据库。
 
-两种运行模式：
-- **任务模式**（推荐）：ETL 流程定义在 YAML 文件中，系统配置与业务配置分离
-- **传统模式**：通过环境变量驱动
-
----
-
-## 依赖项
-
-| 依赖 | 说明 |
-|------|------|
-| Go 1.24+ | 编译运行环境 |
-| MySQL 8.0+（可选） | 数据源之一 |
-| PostgreSQL 15+（可选） | 数据源或目标库 |
-| Python 3（可选） | Python 脚本转换模式 |
-| `main/conf/dsn.json` | 数据库连接配置 |
-| `main/script/` | ETL 业务脚本（SQL + Python） |
+- **运行方式**：Windows 执行 `detl.exe`，Linux/Mac 执行 `./detl`
+- **两种模式**：**任务模式**（推荐，YAML 驱动）和**传统模式**（环境变量驱动）
 
 ---
 
-## 构建
+## 快速开始
 
-```bash
-go build -o main.exe ./main
-```
+### 1. 配置数据库连接
 
----
-
-## 配置
-
-### dsn.json — 数据库连接注册
-
-文件路径：`main/conf/dsn.json`
-
-每个数据源必须有唯一的 `Name`，ETL 任务通过 `Name` 引用。
+编辑 `conf/dsn.json`，注册数据源：
 
 ```json
 {
@@ -48,15 +24,14 @@ go build -o main.exe ./main
 }
 ```
 
-### system.yaml — 系统默认配置（可选）
+### 2. 运行任务
 
-文件路径：`main/conf/system.yaml`
+```bash
+# Windows
+detl.exe -task task/user_etl.yaml
 
-环境变量优先级高于此文件。
-
-```yaml
-script_dir: main/script
-output_dir: output
+# Linux / Mac
+./detl -task task/user_etl.yaml
 ```
 
 ---
@@ -65,11 +40,13 @@ output_dir: output
 
 ### 任务模式（推荐）
 
+ETL 流程定义在 YAML 中，通过 `-task` 参数指定：
+
 ```bash
-go run ./main -task <任务文件路径>
+detl.exe -task task/user_etl.yaml
 ```
 
-任务文件相对于当前目录或 `SCRIPT_DIR` 查找。路径解析优先级：
+任务文件查找优先级：
 1. 绝对路径 → 直接读取
 2. 相对路径且文件存在 → 直接读取
 3. 不存在 → 回退到 `SCRIPT_DIR` 下查找
@@ -77,10 +54,35 @@ go run ./main -task <任务文件路径>
 ### 传统模式（环境变量驱动）
 
 ```bash
-CONF_DIR=main/conf DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql go run ./main
+# Windows
+set CONF_DIR=conf && set DB_DRIVER=postgres && set SCRIPT_FILE=e_detl_users.sql && detl.exe
+
+# Linux / Mac
+CONF_DIR=conf DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql ./detl
 ```
 
-两种模式互斥。指定 `-task` 时忽略所有 ETL 业务相关的环境变量。
+两种模式互斥。指定 `-task` 时忽略所有 ETL 业务环境变量。
+
+---
+
+## 配置
+
+### dsn.json — 数据库连接注册
+
+路径：`conf/dsn.json`
+
+每个数据源必须有唯一的 `Name`，ETL 任务通过 `Name` 引用。
+
+### system.yaml — 系统默认配置（可选）
+
+路径：`conf/system.yaml`
+
+```yaml
+script_dir: script
+output_dir: output
+```
+
+环境变量优先级高于此文件。
 
 ---
 
@@ -94,7 +96,7 @@ name: 用户数据清洗
 
 source:
   connection: dev_pg                  # 引用 dsn.json 中的连接名
-  query_file: e_detl_users.sql        # SCRIPT_DIR 下的 SQL 文件
+  query_file: e_detl_users.sql        # SQL 脚本文件
   # query: "SELECT ..."               # 或内联 SQL（二选一）
 
 transform:
@@ -103,7 +105,7 @@ transform:
 
 load:
   type: csv                           # csv | stdout | sql
-  file: etl_output.csv                # 输出文件（相对于 OUTPUT_DIR）
+  file: etl_output.csv                # 输出文件
   columns: [id, full_name, email, age]
 ```
 
@@ -122,8 +124,6 @@ load:
 
 ### 作业（多个转换的集合，预留）
 
-执行引擎尚未实现，仅作为设计参考。
-
 ```yaml
 kind: 作业
 name: 每日同步
@@ -131,6 +131,8 @@ tasks:
   - task: user_etl.yaml
   - task: user_enrich.yaml
 ```
+
+执行引擎尚未实现。
 
 ---
 
@@ -170,7 +172,7 @@ tasks:
 - 每行输出后必须 `flush=True`
 - 返回 `null` 或空行跳过该行
 
-**示例脚本** `main/script/t_users.py`：
+**示例脚本** `script/t_users.py`：
 
 ```python
 import sys, json
@@ -186,58 +188,32 @@ for line in sys.stdin:
 
 ---
 
-## 常用命令速查
+## 场景示例
 
-```bash
-# ── 构建 ──
-go build -o main.exe ./main
-
-# ── 任务模式（推荐）──
-go run ./main -task main/task/user_etl.yaml
-go run ./main -task main/task/user_etl_stdout.yaml
-go run ./main -task main/task/user_etl_to_pg.yaml
-
-# ── 传统模式 ──
-# PG → 内置转换 → CSV
-CONF_DIR=main/conf DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql go run ./main
-
-# MySQL → Python 转换 → CSV
-CONF_DIR=main/conf DB_DRIVER=mysql SCRIPT_FILE=e_detl_users.sql \
-  TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py go run ./main
-
-# 控制台输出
-CONF_DIR=main/conf DB_DRIVER=postgres LOAD_TYPE=stdout go run ./main
-
-# 透传原始数据
-CONF_DIR=main/conf DB_DRIVER=postgres TRANSFORM_MODE=none go run ./main
-
-# SQL 写入
-LOAD_TYPE=sql OUTPUT_FILE=etl_target go run ./main
-
-# ── 测试 ──
-go test -v -run TestPipeline_PG_to_CSV
-go test -v -run TestPipeline_MySQL_to_CSV
-go test -v -run TestSQLLoad_MySQL_to_PG    # 全链路：MySQL→Python→PG
-```
-
----
-
-## 完整场景示例
-
-### 场景 1：MySQL 清洗后写入 CSV
-
-```bash
-# 1. 确保 MySQL 有测试数据
-go test -v -run TestPipeline_MySQL_to_CSV
-
-# 2. 运行 ETL 任务
-go run ./main -task main/task/user_etl.yaml
-```
-
-### 场景 2：MySQL → Python 清洗 → PG 写入
+### MySQL → 内置转换 → CSV
 
 ```yaml
-# main/task/user_etl_to_pg.yaml
+# task/user_etl.yaml
+kind: 转换
+name: 用户数据清洗
+source:
+  connection: dev_mysql
+  query_file: e_detl_users.sql
+transform:
+  mode: builtin
+load:
+  type: csv
+  file: etl_output.csv
+  columns: [id, full_name, email, age, created_at, source, etl_time]
+```
+
+```bash
+detl.exe -task task/user_etl.yaml
+```
+
+### MySQL → Python 清洗 → PostgreSQL 写入
+
+```yaml
 kind: 转换
 name: 用户数据同步到 PG
 source:
@@ -257,35 +233,32 @@ load:
 ```
 
 ```bash
-go run ./main -task main/task/user_etl_to_pg.yaml
+detl.exe -task task/user_etl_to_pg.yaml
+```
+
+### 传统模式一行命令
+
+```bash
+# PG → 内置转换 → CSV
+CONF_DIR=conf DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql detl.exe
+
+# MySQL → 透传 → 控制台
+CONF_DIR=conf DB_DRIVER=mysql TRANSFORM_MODE=none LOAD_TYPE=stdout detl.exe
 ```
 
 ---
 
-## 目录结构
+## 用户目录结构
 
 ```
 detl/
-├── main/                       # 程序入口
-│   ├── main.go                # 入口（支持 -task flag）
-│   ├── main_func.go           # ETL 编排
-│   ├── conf/
-│   │   ├── dsn.json           # 数据源配置（连接名 → DSN）
-│   │   └── system.yaml        # 系统默认配置（可选）
-│   ├── script/                 # ETL 业务脚本（SQL + Python）
-│   └── task/                   # ETL 任务 YAML 文件
+├── detl.exe                  # 可执行文件（Windows）
 ├── conf/
-│   └── conf.go                 # 配置管理（DSN + system.yaml）
-├── internal/
-│   ├── engine/                 # Pipeline 编排
-│   ├── source/                 # 数据抽取（SQL）
-│   ├── transform/              # 数据转换（内置 + Python）
-│   ├── load/                   # 数据载入（CSV + Stdout + SQL）
-│   └── task/                   # YAML 任务解析
-├── output/                     # 输出文件
-├── SKILL.md                    # 本文件
-├── README.md
-└── CLAUDE.md
+│   ├── dsn.json              # 数据源配置
+│   └── system.yaml           # 系统默认配置（可选）
+├── script/                   # ETL 业务脚本（SQL + Python）
+├── task/                     # ETL 任务 YAML 文件
+└── output/                   # CSV 输出目录
 ```
 
 ---

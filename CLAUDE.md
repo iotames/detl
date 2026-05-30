@@ -8,8 +8,11 @@
 # 构建
 go build ./...
 
-# 构建主入口
-go build -o main.exe ./main
+# 安装到 $GOPATH/bin（推荐）
+go install ./cmd/detl
+
+# 本地编译（二进制在 ./bin/ 下，不污染项目根目录）
+go build -o ./bin/detl.exe ./cmd/detl
 
 # 运行测试（需要 PG 在 localhost:5432，user=postgres, password=postgres）
 go test -v -run TestPipeline_PG_to_CSV
@@ -24,23 +27,23 @@ go test -v ./...
 go vet ./...
 
 # 运行 ETL 任务（YAML 任务模式）
-TASK_DIR=main/task go run ./main -task user_etl.yaml
+TASK_DIR=cmd/detl/task go run ./cmd/detl -task user_etl.yaml
 
 # 任务模式 + stdout
-TASK_DIR=main/task go run ./main -task user_etl_stdout.yaml
+TASK_DIR=cmd/detl/task go run ./cmd/detl -task user_etl_stdout.yaml
 
 # 运行（环境变量驱动）
-CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql go run ./main
+CONF_DIR=cmd/detl/conf SCRIPT_DIR=cmd/detl/script DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql go run ./cmd/detl
 
 # Python 脚本转换
-CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql \
-  TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py go run ./main
+CONF_DIR=cmd/detl/conf SCRIPT_DIR=cmd/detl/script DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql \
+  TRANSFORM_MODE=python TRANSFORM_SCRIPT=t_users.py go run ./cmd/detl
 
 # 控制台输出
-CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=postgres LOAD_TYPE=stdout go run ./main
+CONF_DIR=cmd/detl/conf SCRIPT_DIR=cmd/detl/script DB_DRIVER=postgres LOAD_TYPE=stdout go run ./cmd/detl
 
 # 透传原始数据（不转换）
-CONF_DIR=main/conf SCRIPT_DIR=main/script DB_DRIVER=postgres TRANSFORM_MODE=none go run ./main
+CONF_DIR=cmd/detl/conf SCRIPT_DIR=cmd/detl/script DB_DRIVER=postgres TRANSFORM_MODE=none go run ./cmd/detl
 ```
 
 ## 架构
@@ -51,7 +54,7 @@ Pipeline 管道模式：**Source → Transform → Load**
 
 ```
                      ┌─────────────────────────────────┐
-                     │      main/main.go + conf         │
+                     │      cmd/detl/main.go + conf      │
                      │   (环境变量/flag 解析, DSN 初始化) │
                      │   system.yaml（可选系统配置覆盖）  │
                      └──────────┬──────────────────────┘
@@ -59,7 +62,7 @@ Pipeline 管道模式：**Source → Transform → Load**
               ┌─────────────────┼──────────────────┐
               ▼                 ▼                    ▼
      ┌────────────────┐ ┌──────────────┐ ┌──────────────────┐
-     │  main/task/*.yaml││   dsn.json   │ │  system.yaml     │
+     │  cmd/detl/task/*.yaml      ││   dsn.json   │ │  system.yaml     │
      │  ETL 业务定义    ││  连接名映射   │ │  系统默认配置     │
      │  kind: 转换/作业 ││  name→DSN    │ │  env 可覆盖       │
      └────────┬───────┘ └──────┬───────┘ └──────────────────┘
@@ -105,7 +108,7 @@ load.Load              → Open(), Write(map[string]any) error, Close()
 
 `Pipeline.Run()`：调用 `source.Open()` → 循环 `source.Read()` → 对每行调用 `transformer.Transform()` → 对每个输出行调用 `load.Write()`。转换失败则跳过该行，写入失败则中止。
 
-### 程序入口（`main/main.go` + `main/main_func.go`）
+### 程序入口（`cmd/detl/main.go` + `cmd/detl/main_func.go`）
 
 `init()` 从环境变量读取所有配置（通过 `github.com/iotames/easyconf`）和 flag。`runETL()` 根据配置构建 Source/Transformer/Load，组装成 Pipeline 并运行。
 
@@ -171,7 +174,7 @@ DSN 连接按 `Name` 字段引用。旧版 dsn.json（无 Name 字段）会自�
 | `SCRIPT_FILE` | `e_detl_users.sql` | 抽取脚本文件名 |
 | `TRANSFORM_MODE` | `builtin` | 转换模式（`builtin` / `python` / `none`） |
 | `TRANSFORM_SCRIPT` | `t_users.py` | Python 转换脚本（`python` 模式时生效） |
-| `LOAD_TYPE` | `csv` | 输出类型（`csv` / `stdout`） |
+| `LOAD_TYPE` | `csv` | 输出类型（`csv` / `stdout` / `sql`） |
 | `OUTPUT_DIR` | `output` | 输出目录 |
 | `OUTPUT_FILE` | `etl_output.csv` | 输出文件名 |
 | `OUTPUT_COLUMNS` | 默认列名 | CSV 列名（逗号分隔） |
@@ -184,12 +187,12 @@ DSN 连接按 `Name` 字段引用。旧版 dsn.json（无 Name 字段）会自�
 
 - 输出时必须 `flush=True`
 - 返回 `null` 或空行可跳过该行
-- 示例见 `main/script/t_users.py`
+- 示例见 `cmd/detl/script/t_users.py`
 
 ## 注意事项
 
-- `main.go:init()` 中 `GetConf("")` 被调用了两次 — 第一次使用 `ConfDir`，第二次使用空字符串。但 `sync.Once` 确保只有第一次生效，因此 `conf.dirPath` 实际由首次 `GetConf(ConfDir)` 设置。后续的 `SetScriptDir` 和 `InitDSN` 会正确完成配置初始化。
-- `builtin` 转换（`main_func.go:78-132`）硬编码为 `detl_test_users` 表结构（id, first_name, last_name, email, age, created_at），不具有通用性。
+- `cmd/detl/main.go:init()` 中 `GetConf("")` 被调用了两次 — 第一次使用 `ConfDir`，第二次使用空字符串。但 `sync.Once` 确保只有第一次生效，因此 `conf.dirPath` 实际由首次 `GetConf(ConfDir)` 设置。后续的 `SetScriptDir` 和 `InitDSN` 会正确完成配置初始化。
+- `builtin` 转换（`cmd/detl/main_func.go:78-132`）硬编码为 `detl_test_users` 表结构（id, first_name, last_name, email, age, created_at），不具有通用性。
 - Python 转换优先使用 `"python"` 命令，找不到时回退 `"python3"` — 在 Windows 上可能解析到 Microsoft Store 存根。
 - 数据库不可用时测试会跳过（helper 先 ping，失败则 Fatal）。
 - 模块路径为 `github.com/iotames/detl`，根包为 `package detl`（不是 `package main`）。
