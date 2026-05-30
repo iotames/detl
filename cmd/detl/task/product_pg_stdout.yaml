@@ -1,0 +1,23 @@
+# ETL 转换任务：PG2 → Python → stdout（不依赖 MySQL，快速测试 Python 脚本）
+kind: 转换
+name: PG2 商品数据转换输出到控制台
+
+source:
+  connection: pg2                       # 源库：pg2
+  query_file: get_pg_products.sql       # PG 抽取 SQL
+
+transform:
+  mode: python                          # Python 脚本转换
+  script: t_product.py                  # 同一套转换脚本
+
+load:
+  type: stdout                          # 控制台输出（CSV 格式）
+  columns:
+    - id
+    - title_cn
+    - title_en
+    - title
+    - price
+    - category_id
+    - stock
+    - status

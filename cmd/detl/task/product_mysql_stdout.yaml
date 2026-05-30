@@ -1,0 +1,23 @@
+# ETL 转换任务：MySQL → Python → stdout（最快迭代验证）
+kind: 转换
+name: MySQL 商品数据转换输出到控制台
+
+source:
+  connection: mysql8_local
+  query_file: get_products.sql
+
+transform:
+  mode: python
+  script: t_product.py
+
+load:
+  type: stdout
+  columns:
+    - id
+    - title_cn
+    - title_en
+    - title
+    - price
+    - stock
+    - category_id
+    - status
