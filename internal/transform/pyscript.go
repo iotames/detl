@@ -12,7 +12,8 @@ import (
 
 // PythonConfig Python 脚本转换配置
 type PythonConfig struct {
-	ScriptPath string // Python 脚本文件路径
+	ScriptPath string            // Python 脚本文件路径
+	Env        map[string]string // 附加环境变量（注入子进程）
 }
 
 type pyscript struct {
@@ -73,6 +74,12 @@ func (t *pyscript) start() error {
 		cmdName = "python3"
 	}
 	t.cmd = exec.Command(cmdName, t.cfg.ScriptPath)
+
+	// 注入环境变量：继承父进程 + 附加变量
+	t.cmd.Env = os.Environ()
+	for k, v := range t.cfg.Env {
+		t.cmd.Env = append(t.cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	}
 
 	stdin, err := t.cmd.StdinPipe()
 	if err != nil {

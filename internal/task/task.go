@@ -2,7 +2,7 @@
 //
 // 支持两种 kind：
 //   - 转换（Transform）：单个 ETL 流程，包含 Source → Transform → Load
-//   - 作业（Job）：多个转换的集合（预留，尚未实现执行引擎）
+//   - 作业（Job）：多个转换的有序集合
 package task
 
 import (
@@ -31,8 +31,9 @@ type SourceConfig struct {
 
 // TransformConfig 转换配置
 type TransformConfig struct {
-	Mode   string `yaml:"mode"`              // builtin | python | none
-	Script string `yaml:"script,omitempty"`  // Python 脚本路径（mode=python 时生效）
+	Mode   string            `yaml:"mode"`              // builtin | python | none
+	Script string            `yaml:"script,omitempty"`  // Python 脚本路径（mode=python 时生效）
+	Env    map[string]string `yaml:"env,omitempty"`     // 附加环境变量（注入 Python 子进程）
 }
 
 // LoadConfig 输出配置
@@ -80,4 +81,3 @@ func LoadTask(path string) (*TaskConfig, error) {
 	}
 	return &cfg, nil
 }
-

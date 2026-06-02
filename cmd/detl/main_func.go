@@ -216,12 +216,7 @@ func runETLFromTask(taskPath string) error {
 	log.Printf("加载任务: kind=%s  name=%s  file=%s", t.Kind, t.Name, taskPath)
 
 	if t.IsJob() {
-		// 作业：预留，列出子任务但不执行
-		log.Printf("作业 %q 包含 %d 个子任务:", t.Name, len(t.Tasks))
-		for _, entry := range t.Tasks {
-			log.Printf("  - %s", entry.Task)
-		}
-		return fmt.Errorf("作业执行尚未实现，请单独运行转换任务")
+		return runJob(taskPath, t)
 	}
 
 	if t.Source == nil || t.Load == nil {
@@ -262,9 +257,10 @@ func runETLFromTask(taskPath string) error {
 			log.Printf("转换模式: none（透传原始数据）")
 		case "python":
 			scriptPath := cf.GetScriptFilePath(t.Transform.Script)
-			log.Printf("转换模式: python  脚本=%s", scriptPath)
+			log.Printf("转换模式: python  脚本=%s  附加环境变量=%v", scriptPath, t.Transform.Env)
 			tf = transform.NewPython(transform.PythonConfig{
 				ScriptPath: scriptPath,
+				Env:        t.Transform.Env,
 			})
 		default:
 			log.Printf("转换模式: builtin（内置清洗）")
@@ -324,6 +320,27 @@ func runETLFromTask(taskPath string) error {
 	if t.Load.Type == "csv" {
 		log.Printf("输出文件: %s", t.Load.File)
 	}
+	return nil
+}
+
+// runJob 执行作业：按顺序依次执行子任务
+func runJob(parentPath string, j *task.TaskConfig) error {
+	parentDir := filepath.Dir(parentPath)
+	log.Printf("作业 %q 开始执行，共 %d 个子任务", j.Name, len(j.Tasks))
+
+	for i, entry := range j.Tasks {
+		childPath := entry.Task
+		if !filepath.IsAbs(childPath) {
+			childPath = filepath.Join(parentDir, childPath)
+		}
+		log.Printf("作业 %q [%d/%d]: 执行 %s", j.Name, i+1, len(j.Tasks), childPath)
+
+		if err := runETLFromTask(childPath); err != nil {
+			return fmt.Errorf("作业 %q 在任务 %s 失败: %w", j.Name, childPath, err)
+		}
+	}
+
+	log.Printf("作业 %q 全部执行完成", j.Name)
 	return nil
 }
 

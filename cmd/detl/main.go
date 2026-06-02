@@ -33,7 +33,6 @@ var (
 
 func main() {
 	flag.Parse()
-	// 兼容旧版：第二次 GetConf 不改变单例，仅为了与旧版顺序一致
 	cf = conf.GetConf("")
 	fmt.Println("GetScriptDir:", cf.GetScriptDir())
 	cf.InitDSN(DbDriver, ActiveDsn)
@@ -53,8 +52,8 @@ func main() {
 
 func init() {
 	var ConfDir, ScriptDir string
-	cf = conf.GetConf(ConfDir)
-	cf.SetScriptDir(ScriptDir)
+
+	// 先解析环境变量获取配置路径
 	env := easyconf.NewConf()
 	env.StringVar(&ConfDir, "CONF_DIR", "conf", "配置目录")
 	env.StringVar(&ScriptDir, "SCRIPT_DIR", "script", "ETL业务脚本目录")
@@ -77,4 +76,8 @@ func init() {
 	env.StringVar(&TaskFile, "task", "", "ETL任务文件（YAML），启用任务模式")
 	env.StringVar(&Version, "version", "unstable", "显示版本信息")
 	env.Parse(true)
+
+	// 环境变量解析后再初始化 Conf，此时 ConfDir 已有值
+	cf = conf.GetConf(ConfDir)
+	cf.SetScriptDir(ScriptDir)
 }
