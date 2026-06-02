@@ -28,7 +28,10 @@ var (
 
 	// Task 模式
 	TaskFile string
-	TaskDir  string
+
+	// DB 测试
+	DBTest  bool
+	DsnName string
 )
 
 func main() {
@@ -36,6 +39,14 @@ func main() {
 	cf = conf.GetConf("")
 	fmt.Println("GetScriptDir:", cf.GetScriptDir())
 	cf.InitDSN(DbDriver, ActiveDsn)
+
+	if DBTest {
+		err := runDBTest(DsnName)
+		if err != nil {
+			panic(fmt.Errorf("runDBTest:%s", err))
+		}
+		return
+	}
 
 	if TaskFile != "" {
 		err := runETLFromTask(TaskFile)
@@ -72,9 +83,13 @@ func init() {
 	env.StringVar(&OutputDir, "OUTPUT_DIR", "output", "输出目录")
 	env.StringVar(&OutputFile, "OUTPUT_FILE", "etl_output.csv", "输出文件名")
 	env.StringVar(&OutputColumns, "OUTPUT_COLUMNS", "id,full_name,email,age,created_at,source,etl_time", "CSV列名(逗号分隔)")
-	env.StringVar(&TaskDir, "TASK_DIR", "task", "ETL任务目录")
 	env.StringVar(&TaskFile, "task", "", "ETL任务文件（YAML），启用任务模式")
 	env.StringVar(&Version, "version", "unstable", "显示版本信息")
+
+	// DB 测试
+	env.BoolVar(&DBTest, "dbtest", false, "数据库连通性测试模式")
+	env.StringVar(&DsnName, "dsnName", "", "要测试的连接名称（dsn.json 中的 Name），为空则测试全部")
+
 	env.Parse(true)
 
 	// 环境变量解析后再初始化 Conf，此时 ConfDir 已有值

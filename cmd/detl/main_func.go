@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/iotames/detl"
 	"github.com/iotames/detl/internal/engine"
 	"github.com/iotames/detl/internal/load"
@@ -15,7 +17,6 @@ import (
 	"github.com/iotames/detl/internal/task"
 	"github.com/iotames/detl/internal/transform"
 	pkgdsn "github.com/iotames/easydb/dsn"
-	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 )
 
@@ -371,4 +372,42 @@ func toLower(s string) string {
 		b[i] = c
 	}
 	return string(b)
+}
+
+// runDBTest 测试数据库连通性
+func runDBTest(dsnName string) error {
+	dgp, err := cf.GetDSNGroup()
+	if err != nil {
+		return fmt.Errorf("读取 DSN 配置失败: %w", err)
+	}
+
+	list := dgp.DsnList
+
+	// 如果指定了连接名，只测试指定的那个
+	if dsnName != "" {
+		ds, ok := dgp.GetDSNByName(dsnName)
+		if !ok {
+			return fmt.Errorf("未找到连接名为 %q 的数据源", dsnName)
+		}
+		list = []pkgdsn.DataSource{ds}
+	}
+
+	for _, ds := range list {
+		fmt.Printf("\n--- 测试连接: %s (%s) ---", ds.Name, ds.DriverName)
+		if err := pingDS(ds.DriverName, ds.Dsn); err != nil {
+			fmt.Printf("  ❌ 失败: %v\n", err)
+		} else {
+			fmt.Printf("  ✅ 成功\n")
+		}
+	}
+	return nil
+}
+
+func pingDS(driver, dsn string) error {
+	db, err := sql.Open(driver, dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.Ping()
 }
