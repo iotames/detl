@@ -26,11 +26,11 @@ go test -v ./...
 # 代码检查
 go vet ./...
 
-# 运行 ETL 任务（YAML 任务模式）
-TASK_DIR=cmd/detl/task go run ./cmd/detl -task user_etl.yaml
+# 运行 ETL 任务（YAML 任务模式，路径可相对于 WORKDIR）
+go run ./cmd/detl -task user_etl.yaml
 
 # 任务模式 + stdout
-TASK_DIR=cmd/detl/task go run ./cmd/detl -task user_etl_stdout.yaml
+go run ./cmd/detl -task user_etl_stdout.yaml
 
 # 运行（环境变量驱动）
 CONF_DIR=cmd/detl/conf SCRIPT_DIR=cmd/detl/script DB_DRIVER=postgres SCRIPT_FILE=e_detl_users.sql go run ./cmd/detl
@@ -50,21 +50,20 @@ CONF_DIR=cmd/detl/conf SCRIPT_DIR=cmd/detl/script DB_DRIVER=postgres TRANSFORM_M
 
 Pipeline 管道模式：**Source → Transform → Load**
 
-系统配置（环境变量 + system.yaml）和 ETL 业务配置（YAML 任务文件）分离。
+系统配置（环境变量）和 ETL 业务配置（YAML 任务文件）分离。
 
 ```
                      ┌─────────────────────────────────┐
                      │      cmd/detl/main.go + conf      │
                      │   (环境变量/flag 解析, DSN 初始化) │
-                     │   system.yaml（可选系统配置覆盖）  │
                      └──────────┬──────────────────────┘
                                 │
               ┌─────────────────┼──────────────────┐
               ▼                 ▼                    ▼
      ┌────────────────┐ ┌──────────────┐ ┌──────────────────┐
-     │  cmd/detl/task/*.yaml      ││   dsn.json   │ │  system.yaml     │
-     │  ETL 业务定义    ││  连接名映射   │ │  系统默认配置     │
-     │  kind: 转换/作业 ││  name→DSN    │ │  env 可覆盖       │
+     │  cmd/detl/task/*.yaml      ││   dsn.json        │
+     │  ETL 业务定义    ││  连接名映射        │
+     │  kind: 转换/作业 ││  name→DSN         │
      └────────┬───────┘ └──────┬───────┘ └──────────────────┘
               │                │
               ▼                ▼
@@ -170,16 +169,15 @@ DSN 连接按 `Name` 字段引用。旧版 dsn.json（无 Name 字段）会自�
 | `CONF_DIR` | `conf` | 配置目录（存放 dsn.json） |
 | `SCRIPT_DIR` | `script` | 脚本目录 |
 | `DB_DRIVER` | `postgres` | 数据库驱动（`postgres` / `mysql`） |
-| `ACTIVE_DSN` | PG 默认 | 默认 DSN 连接字符串 |
+| `ACTIVE_DSN` | PG 默认 | 默认 DSN 连接字符串（dsn.json 无匹配时回退） |
 | `SCRIPT_FILE` | `e_detl_users.sql` | 抽取脚本文件名 |
 | `TRANSFORM_MODE` | `builtin` | 转换模式（`builtin` / `python` / `none`） |
 | `TRANSFORM_SCRIPT` | `t_users.py` | Python 转换脚本（`python` 模式时生效） |
 | `LOAD_TYPE` | `csv` | 输出类型（`csv` / `stdout` / `sql`） |
 | `OUTPUT_DIR` | `output` | 输出目录 |
-| `OUTPUT_FILE` | `etl_output.csv` | 输出文件名 |
-| `OUTPUT_COLUMNS` | 默认列名 | CSV 列名（逗号分隔） |
-| `TASK_DIR` | `task` | ETL 任务 YAML 目录 |
-| `-task` flag | — | 指定任务文件，启用任务模式 |
+| `-task` flag | — | 指定任务文件（YAML），启用任务模式 |
+
+> 文件名、列名等业务参数通过 YAML 任务文件定义，不再支持环境变量注入。
 
 ## Python 脚本转换
 
@@ -191,8 +189,6 @@ DSN 连接按 `Name` 字段引用。旧版 dsn.json（无 Name 字段）会自�
 
 ## 注意事项
 
-- `cmd/detl/main.go:init()` 中 `GetConf("")` 被调用了两次 — 第一次使用 `ConfDir`，第二次使用空字符串。但 `sync.Once` 确保只有第一次生效，因此 `conf.dirPath` 实际由首次 `GetConf(ConfDir)` 设置。后续的 `SetScriptDir` 和 `InitDSN` 会正确完成配置初始化。
-- `builtin` 转换（`cmd/detl/main_func.go:78-132`）硬编码为 `detl_test_users` 表结构（id, first_name, last_name, email, age, created_at），不具有通用性。
 - Python 转换优先使用 `"python"` 命令，找不到时回退 `"python3"` — 在 Windows 上可能解析到 Microsoft Store 存根。
 - 数据库不可用时测试会跳过（helper 先 ping，失败则 Fatal）。
 - 模块路径为 `github.com/iotames/detl`，根包为 `package detl`（不是 `package main`）。

@@ -104,6 +104,17 @@ func (s ScriptDir) GetScriptBytes(fpath string) (b []byte, err error) {
 	return b, err
 }
 
+// GetScriptPath 返回第一个存在的脚本文件的完整路径。在所有已注册的目录中查找，找不到返回空字符串。
+func (s ScriptDir) GetScriptPath(fpath string) string {
+	for _, d := range s.dirList {
+		fullPath := filepath.Join(d, fpath)
+		if s.OkNormalFile(fullPath) == nil {
+			return fullPath
+		}
+	}
+	return ""
+}
+
 // GetFirstExistFile 从给定的多个文件种，获取第一个存在的文件。
 func (s ScriptDir) GetFirstExistFile(filelist ...string) string {
 	for _, f := range filelist {

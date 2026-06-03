@@ -64,6 +64,10 @@ func (p *Pipeline) Run() error {
 		}
 	}
 
-	fmt.Printf("Pipeline 完成，共处理 %d 行\n", rowCount)
+	if errCount > 0 {
+		fmt.Printf("Pipeline 完成，共处理 %d 行，%d 行转换失败\n", rowCount, errCount)
+	} else {
+		fmt.Printf("Pipeline 完成，共处理 %d 行\n", rowCount)
+	}
 	return nil
 }

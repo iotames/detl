@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 )
 
 type stdoutLoad struct {
@@ -34,8 +33,9 @@ func (l *stdoutLoad) Write(row map[string]any) error {
 			}
 			sort.Strings(cols)
 		}
-		// 打印表头
-		fmt.Println(strings.Join(cols, ","))
+		if err := l.writer.Write(cols); err != nil {
+			return fmt.Errorf("stdout header: %w", err)
+		}
 		l.cols = cols
 		l.wrote = true
 	}
@@ -44,7 +44,10 @@ func (l *stdoutLoad) Write(row map[string]any) error {
 	for i, col := range cols {
 		record[i] = formatValue(row[col])
 	}
-	fmt.Println(strings.Join(record, ","))
+	if err := l.writer.Write(record); err != nil {
+		return fmt.Errorf("stdout row: %w", err)
+	}
+	l.writer.Flush()
 	return nil
 }
 

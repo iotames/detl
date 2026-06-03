@@ -3,6 +3,7 @@ package source
 import (
 	"database/sql"
 	"fmt"
+	"log"
 )
 
 // SQLConfig 数据库源配置
@@ -62,6 +63,7 @@ func (s *sqlSource) Read() (map[string]any, bool) {
 	}
 
 	if err := s.rows.Scan(valuePtrs...); err != nil {
+		log.Printf("source scan row error: %v", err)
 		return nil, false
 	}
 
