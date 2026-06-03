@@ -1,7 +1,0 @@
-# ETL 作业（预留）：商品数据每日同步
-kind: 作业
-name: 商品每日同步作业
-
-tasks:
-  - task: product_sync_to_pg.yaml       # MySQL → Python → PG2 主流程
-  - task: product_pg_stdout.yaml        # PG2 → Python → stdout 验证流程

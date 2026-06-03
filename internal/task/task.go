@@ -69,23 +69,42 @@ func (t TaskConfig) IsJob() bool {
 
 // LoadTask 从 YAML 文件加载任务/作业定义
 func LoadTask(path string) (*TaskConfig, error) {
-	//
 	data, err := hotswap.GetScriptDir().GetScriptBytes(path)
 	if err != nil {
-		if _, err = os.Stat(path); os.IsNotExist(err) {
-			return nil, fmt.Errorf("任务文件不存在: %s", path)
-		}
 		data, err = os.ReadFile(path)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("任务文件不存在: %s", path)
+			}
 			return nil, fmt.Errorf("读取任务文件 %s 失败: %w", path, err)
 		}
-
 	}
 	var cfg TaskConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("解析任务文件 %s 失败: %w", path, err)
 	}
-	if cfg.Kind != "转换" && cfg.Kind != "作业" {
+	switch cfg.Kind {
+	case "转换":
+		if cfg.Source == nil {
+			return nil, fmt.Errorf("转换任务 %q 缺少 source 配置", cfg.Name)
+		}
+		if cfg.Load == nil {
+			return nil, fmt.Errorf("转换任务 %q 缺少 load 配置", cfg.Name)
+		}
+		if cfg.Source.Connection == "" {
+			return nil, fmt.Errorf("转换任务 %q 的 source 缺少 connection 字段", cfg.Name)
+		}
+		if cfg.Source.Query == "" && cfg.Source.QueryFile == "" {
+			return nil, fmt.Errorf("转换任务 %q 的 source 缺少 query 或 query_file", cfg.Name)
+		}
+		if cfg.Load.Type == "" {
+			return nil, fmt.Errorf("转换任务 %q 的 load 缺少 type 字段", cfg.Name)
+		}
+	case "作业":
+		if len(cfg.Tasks) == 0 {
+			return nil, fmt.Errorf("作业 %q 的 tasks 列表为空", cfg.Name)
+		}
+	default:
 		return nil, fmt.Errorf("未知任务类型 %q（仅支持 转换/作业）", cfg.Kind)
 	}
 	return &cfg, nil

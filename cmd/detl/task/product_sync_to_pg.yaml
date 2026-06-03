@@ -3,7 +3,7 @@ kind: 转换
 name: 商品数据同步到 PG2
 
 source:
-  connection: mysql8_local              # 源库：mysql8_local
+  connection: dev_mysql                 # 源库：dev_mysql
   query_file: get_products.sql          # MySQL 抽取 SQL
 
 transform:
@@ -12,7 +12,7 @@ transform:
 
 load:
   type: sql                             # 目标库：SQL 写入
-  connection: pg2                       # pg2 dsn.json 连接名
+  connection: dev_pg                    # dev_pg dsn.json 连接名
   table: debug.etl_test_product         # 目标表
   mode: upsert                          # upsert（重复则更新）
   key_columns: [id]                     # upsert 唯一键

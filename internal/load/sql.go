@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 )
 
@@ -57,7 +58,7 @@ func (l *sqlLoad) Write(row map[string]any) error {
 			l.cols = append(l.cols, k)
 		}
 		// 统一列顺序，避免每次 map 遍历不一致
-		sortStrings(l.cols)
+		sort.Strings(l.cols)
 
 		if l.cfg.CreateTable {
 			if err := l.createTable(); err != nil {
@@ -204,12 +205,3 @@ func (l *sqlLoad) quoteIdent(name string) string {
 	return "`" + name + "`"
 }
 
-func sortStrings(s []string) {
-	for i := 0; i < len(s); i++ {
-		for j := i + 1; j < len(s); j++ {
-			if s[i] > s[j] {
-				s[i], s[j] = s[j], s[i]
-			}
-		}
-	}
-}

@@ -74,25 +74,28 @@ func (l *csvLoad) Close() error {
 }
 
 func formatValue(v any) string {
-	if v == nil {
-		return ""
-	}
-	rv := reflect.ValueOf(v)
-	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface:
-		if rv.IsNil() {
+	for {
+		if v == nil {
 			return ""
 		}
-		return formatValue(rv.Elem().Interface())
-	case reflect.String:
-		return rv.String()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return fmt.Sprintf("%d", rv.Int())
-	case reflect.Float32, reflect.Float64:
-		return fmt.Sprintf("%v", rv.Float())
-	case reflect.Bool:
-		return fmt.Sprintf("%t", rv.Bool())
-	default:
-		return fmt.Sprintf("%v", v)
+		rv := reflect.ValueOf(v)
+		switch rv.Kind() {
+		case reflect.Ptr, reflect.Interface:
+			if rv.IsNil() {
+				return ""
+			}
+			v = rv.Elem().Interface()
+			continue
+		case reflect.String:
+			return rv.String()
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return fmt.Sprintf("%d", rv.Int())
+		case reflect.Float32, reflect.Float64:
+			return fmt.Sprintf("%v", rv.Float())
+		case reflect.Bool:
+			return fmt.Sprintf("%t", rv.Bool())
+		default:
+			return fmt.Sprintf("%v", v)
+		}
 	}
 }

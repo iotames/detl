@@ -11,9 +11,11 @@ import (
 
 var ConfDir, ScriptDir string
 
+const appVersion = "unstable"
+
 var (
-	ActiveDsn, Version string
-	cf                 *conf.Conf
+	ActiveDsn string
+	cf        *conf.Conf
 
 	// Source 配置
 	DbDriver   string
@@ -23,11 +25,9 @@ var (
 	TransformMode   string
 	TransformScript string
 
-	// Load 配置
-	LoadType      string
-	OutputDir     string
-	OutputFile    string
-	OutputColumns string
+	// Load 配置（文件名和列名由 YAML 任务定义，环境变量模式使用固定默认值）
+	LoadType  string
+	OutputDir string
 
 	// Task 模式
 	TaskFile string
@@ -35,9 +35,15 @@ var (
 	// DB 测试
 	DBTest  bool
 	DsnName string
+
+	showVersion bool
 )
 
 func main() {
+	if showVersion {
+		fmt.Println(appVersion)
+		return
+	}
 	cf = conf.GetConf()
 	fmt.Println("ScriptDir:", ScriptDir)
 	cf.InitDSN(DbDriver, ActiveDsn)
@@ -69,8 +75,12 @@ func initScript() {
 }
 
 func init() {
+	parseEnv()
+	initConf()
+	initScript()
+}
 
-	// 先解析环境变量获取配置路径
+func parseEnv() {
 	env := easyconf.NewConf()
 	env.StringVar(&ConfDir, "CONF_DIR", "conf", "配置目录")
 	env.StringVar(&ScriptDir, "SCRIPT_DIR", "script", "ETL业务脚本目录")
@@ -84,25 +94,23 @@ func init() {
 	env.StringVar(&TransformMode, "TRANSFORM_MODE", "builtin", "转换模式(builtin/python/none)")
 	env.StringVar(&TransformScript, "TRANSFORM_SCRIPT", "t_users.py", "转换脚本文件名(TRANSFORM_MODE=python时生效)")
 
-	// Load
+	// Load（文件名和列名由 YAML 任务定义，环境变量模式使用固定默认值）
 	env.StringVar(&LoadType, "LOAD_TYPE", "csv", "输出类型(csv/stdout)")
 	env.StringVar(&OutputDir, "OUTPUT_DIR", "output", "输出目录")
-	env.StringVar(&OutputFile, "OUTPUT_FILE", "etl_output.csv", "输出文件名")
-	env.StringVar(&OutputColumns, "OUTPUT_COLUMNS", "id,full_name,email,age,created_at,source,etl_time", "CSV列名(逗号分隔)")
 	env.StringVar(&TaskFile, "task", "", "ETL任务文件（YAML），启用任务模式")
-	env.StringVar(&Version, "version", "unstable", "显示版本信息")
+	env.BoolVar(&showVersion, "version", false, "显示版本信息并退出")
 
 	// DB 测试
 	env.BoolVar(&DBTest, "dbtest", false, "数据库连通性测试模式")
 	env.StringVar(&DsnName, "dsnName", "", "要测试的连接名称（dsn.json 中的 Name），为空则测试全部")
 
 	env.Parse(true)
+}
 
-	// 环境变量解析后再初始化 Conf，此时 ConfDir 已有值
+func initConf() {
 	if err := conf.SetConf(ConfDir); err != nil {
 		panic(fmt.Errorf("SetConf error:%s", err))
 	}
 	cf = conf.GetConf()
-	cf.SetScriptDir(ScriptDir) // TODO 删掉
-	initScript()
+	cf.SetScriptDir(ScriptDir)
 }

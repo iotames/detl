@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/iotames/detl/log"
 	pkgdsn "github.com/iotames/easydb/dsn"
@@ -19,7 +18,6 @@ type SystemConfig struct {
 }
 
 var cf *Conf
-var once sync.Once
 
 func GetConf() *Conf {
 	if cf == nil {
@@ -31,26 +29,21 @@ func GetConf() *Conf {
 }
 
 func SetConf(confdir string) error {
-	var err error
 	if confdir == "" {
-		err = fmt.Errorf("指定配置目录 confdir 不能为空！")
-	}
-	if cf != nil {
-		err = fmt.Errorf("请勿重复初始化配置！")
-	}
-	if err != nil {
+		err := fmt.Errorf("指定配置目录 confdir 不能为空！")
 		log.Error("SetConf 错误", "error", err)
 		return err
 	}
-	once.Do(func() {
-		cf = newConf(confdir)
-	})
+	if cf != nil {
+		return nil
+	}
+	cf = newConf(confdir)
 	return nil
 }
 
 func newConf(confdir string) *Conf {
 	if err := miniutils.Mkdir(confdir); err != nil {
-		panic(confdir)
+		panic(fmt.Errorf("创建配置目录 %s 失败: %w", confdir, err))
 	}
 	return &Conf{
 		dirPath: confdir,
@@ -150,31 +143,4 @@ func (c Conf) GetDSNByDriver(driver string) (pkgdsn.DataSource, bool) {
 		}
 	}
 	return pkgdsn.DataSource{}, false
-}
-
-func (c Conf) SetActiveDSN(driverName, dsn string) error {
-	dsnconf, err, isInit := c.InitDSN(driverName, dsn)
-	if err != nil {
-		return err
-	}
-	if isInit {
-		return err
-	}
-	dgp := &pkgdsn.DsnGroup{}
-	err = dsnconf.GetDsnGroup(dgp)
-	if err != nil {
-		return err
-	}
-	dsnCode := miniutils.Md5(dsn)
-	if dgp.HasActive(dsnCode) {
-		return nil
-	}
-	if !dgp.HasDsn(dsn) {
-		dgp.AppendDsn(driverName, dsn)
-	}
-	err = dgp.Active(dsnCode)
-	if err != nil {
-		return err
-	}
-	return dsnconf.SaveDsnGroup(*dgp)
 }

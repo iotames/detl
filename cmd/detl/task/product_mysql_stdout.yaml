@@ -3,7 +3,7 @@ kind: 转换
 name: MySQL 商品数据转换输出到控制台
 
 source:
-  connection: mysql8_local
+  connection: dev_mysql
   query_file: get_products.sql
 
 transform:

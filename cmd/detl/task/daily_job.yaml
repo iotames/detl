@@ -1,9 +1,0 @@
-# ETL 作业（预留）：多个转换的集合
-# 执行引擎尚未实现，仅作为设计参考
-kind: 作业
-name: 每日用户数据同步
-
-tasks:
-  - task: user_etl.yaml                    # 第一步：清洗输出 CSV
-  - task: user_enrich.yaml                 # 第二步：数据 enrichment（预留）
-  - task: user_load_db.yaml                # 第三步：写入目标库（预留）

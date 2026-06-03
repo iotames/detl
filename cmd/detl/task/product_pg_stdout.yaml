@@ -3,7 +3,7 @@ kind: 转换
 name: PG2 商品数据转换输出到控制台
 
 source:
-  connection: pg2                       # 源库：pg2
+  connection: dev_pg                    # 源库：dev_pg
   query_file: get_pg_products.sql       # PG 抽取 SQL
 
 transform:

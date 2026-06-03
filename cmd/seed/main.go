@@ -113,10 +113,10 @@ func main() {
 		log.Fatalf("解析 dsn.json 失败: %v", err)
 	}
 
-	code := "mysql8_local"
+	code := "dev_mysql"
 	driver := "mysql"
 	if *usePG {
-		code = "pg2"
+		code = "dev_pg"
 		driver = "postgres"
 	}
 
@@ -246,8 +246,11 @@ func execDDL(db *sql.DB) {
 }
 
 func execPGDDL(db *sql.DB) {
+	if _, err := db.Exec("CREATE SCHEMA IF NOT EXISTS debug"); err != nil {
+		log.Fatalf("PG 创建 schema 失败: %v", err)
+	}
 	ddl := `
-	CREATE TABLE IF NOT EXISTS product_category (
+	CREATE TABLE IF NOT EXISTS debug.product_category (
 		id         BIGSERIAL    PRIMARY KEY,
 		name       VARCHAR(100) NOT NULL DEFAULT '',
 		parent_id  BIGINT       NOT NULL DEFAULT 0,
@@ -255,16 +258,16 @@ func execPGDDL(db *sql.DB) {
 		status     SMALLINT     NOT NULL DEFAULT 1,
 		created_at TIMESTAMP    NOT NULL DEFAULT NOW()
 	);
-	CREATE INDEX IF NOT EXISTS idx_product_category_parent_id ON product_category(parent_id);
+	CREATE INDEX IF NOT EXISTS idx_debug_product_category_parent_id ON debug.product_category(parent_id);
 
-	CREATE TABLE IF NOT EXISTS product_tag (
+	CREATE TABLE IF NOT EXISTS debug.product_tag (
 		id         BIGSERIAL   PRIMARY KEY,
 		name       VARCHAR(50) NOT NULL DEFAULT '',
 		created_at TIMESTAMP   NOT NULL DEFAULT NOW()
 	);
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_product_tag_name ON product_tag(name);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_debug_product_tag_name ON debug.product_tag(name);
 
-	CREATE TABLE IF NOT EXISTS etl_test_product (
+	CREATE TABLE IF NOT EXISTS debug.etl_test_product (
 		id          BIGSERIAL       PRIMARY KEY,
 		title_cn    VARCHAR(255)    NOT NULL DEFAULT '',
 		title_en    VARCHAR(255)    NOT NULL DEFAULT '',
@@ -278,17 +281,17 @@ func execPGDDL(db *sql.DB) {
 		created_at  TIMESTAMP       NOT NULL DEFAULT NOW(),
 		updated_at  TIMESTAMP       NOT NULL DEFAULT NOW()
 	);
-	CREATE INDEX IF NOT EXISTS idx_product_category_id ON etl_test_product(category_id);
-	CREATE INDEX IF NOT EXISTS idx_product_status ON etl_test_product(status);
-	CREATE INDEX IF NOT EXISTS idx_product_created_at ON etl_test_product(created_at);
+	CREATE INDEX IF NOT EXISTS idx_debug_product_category_id ON debug.etl_test_product(category_id);
+	CREATE INDEX IF NOT EXISTS idx_debug_product_status ON debug.etl_test_product(status);
+	CREATE INDEX IF NOT EXISTS idx_debug_product_created_at ON debug.etl_test_product(created_at);
 
-	CREATE TABLE IF NOT EXISTS product_tag_x (
+	CREATE TABLE IF NOT EXISTS debug.product_tag_x (
 		id         BIGSERIAL  PRIMARY KEY,
 		product_id BIGINT     NOT NULL DEFAULT 0,
 		tag_id     BIGINT     NOT NULL DEFAULT 0
 	);
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_product_tag_x_product_tag ON product_tag_x(product_id, tag_id);
-	CREATE INDEX IF NOT EXISTS idx_product_tag_x_tag_id ON product_tag_x(tag_id);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_debug_product_tag_x_product_tag ON debug.product_tag_x(product_id, tag_id);
+	CREATE INDEX IF NOT EXISTS idx_debug_product_tag_x_tag_id ON debug.product_tag_x(tag_id);
 	`
 
 	for _, stmt := range splitSQL(ddl) {
