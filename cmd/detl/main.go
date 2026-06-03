@@ -1,12 +1,15 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 
+	"github.com/iotames/detl/cmd/detl/script"
 	"github.com/iotames/detl/conf"
+	"github.com/iotames/detl/hotswap"
 	"github.com/iotames/easyconf"
 )
+
+var ConfDir, ScriptDir string
 
 var (
 	ActiveDsn, Version string
@@ -35,9 +38,8 @@ var (
 )
 
 func main() {
-	flag.Parse()
-	cf = conf.GetConf("")
-	fmt.Println("GetScriptDir:", cf.GetScriptDir())
+	cf = conf.GetConf()
+	fmt.Println("ScriptDir:", ScriptDir)
 	cf.InitDSN(DbDriver, ActiveDsn)
 
 	if DBTest {
@@ -61,8 +63,12 @@ func main() {
 	}
 }
 
+func initScript() {
+	sqldir := hotswap.NewScriptDir(script.GetScriptFs(), ScriptDir)
+	hotswap.SetScriptDir(sqldir)
+}
+
 func init() {
-	var ConfDir, ScriptDir string
 
 	// 先解析环境变量获取配置路径
 	env := easyconf.NewConf()
@@ -93,6 +99,10 @@ func init() {
 	env.Parse(true)
 
 	// 环境变量解析后再初始化 Conf，此时 ConfDir 已有值
-	cf = conf.GetConf(ConfDir)
-	cf.SetScriptDir(ScriptDir)
+	if err := conf.SetConf(ConfDir); err != nil {
+		panic(fmt.Errorf("SetConf error:%s", err))
+	}
+	cf = conf.GetConf()
+	cf.SetScriptDir(ScriptDir) // TODO 删掉
+	initScript()
 }

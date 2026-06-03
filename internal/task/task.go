@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/iotames/detl/hotswap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,16 +25,16 @@ type TaskConfig struct {
 
 // SourceConfig 数据源配置
 type SourceConfig struct {
-	Connection string `yaml:"connection"`            // dsn.json 中的连接名
-	QueryFile  string `yaml:"query_file"`            // SQL 脚本文件名（相对于 SCRIPT_DIR）
-	Query      string `yaml:"query,omitempty"`       // 内联 SQL（与 query_file 二选一）
+	Connection string `yaml:"connection"`      // dsn.json 中的连接名
+	QueryFile  string `yaml:"query_file"`      // SQL 脚本文件名（相对于 SCRIPT_DIR）
+	Query      string `yaml:"query,omitempty"` // 内联 SQL（与 query_file 二选一）
 }
 
 // TransformConfig 转换配置
 type TransformConfig struct {
-	Mode   string            `yaml:"mode"`              // builtin | python | none
-	Script string            `yaml:"script,omitempty"`  // Python 脚本路径（mode=python 时生效）
-	Env    map[string]string `yaml:"env,omitempty"`     // 附加环境变量（注入 Python 子进程）
+	Mode   string            `yaml:"mode"`             // builtin | python | none
+	Script string            `yaml:"script,omitempty"` // Python 脚本路径（mode=python 时生效）
+	Env    map[string]string `yaml:"env,omitempty"`    // 附加环境变量（注入 Python 子进程）
 }
 
 // LoadConfig 输出配置
@@ -68,9 +69,17 @@ func (t TaskConfig) IsJob() bool {
 
 // LoadTask 从 YAML 文件加载任务/作业定义
 func LoadTask(path string) (*TaskConfig, error) {
-	data, err := os.ReadFile(path)
+	//
+	data, err := hotswap.GetScriptDir().GetScriptBytes(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取任务文件 %s 失败: %w", path, err)
+		if _, err = os.Stat(path); os.IsNotExist(err) {
+			return nil, fmt.Errorf("任务文件不存在: %s", path)
+		}
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("读取任务文件 %s 失败: %w", path, err)
+		}
+
 	}
 	var cfg TaskConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {

@@ -19,11 +19,18 @@ type ScriptDir struct {
 var onesd *ScriptDir
 var once sync.Once
 
-// GetScriptDir 获取脚本目录单例
-func GetScriptDir(sd *ScriptDir) *ScriptDir {
+// SetScriptDir 获取脚本目录单例
+func SetScriptDir(sd *ScriptDir) *ScriptDir {
 	once.Do(func() {
 		onesd = sd
 	})
+	if onesd == nil {
+		panic("ScriptDir is nil")
+	}
+	return onesd
+}
+
+func GetScriptDir() *ScriptDir {
 	if onesd == nil {
 		panic("ScriptDir is nil")
 	}

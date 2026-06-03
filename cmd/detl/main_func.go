@@ -209,7 +209,6 @@ func runETL() error {
 
 // runETLFromTask 从 YAML 任务文件执行 ETL
 func runETLFromTask(taskPath string) error {
-	taskPath = resolveTaskPath(taskPath, cf.GetScriptDir())
 	t, err := task.LoadTask(taskPath)
 	if err != nil {
 		return err
@@ -346,7 +345,7 @@ func runJob(parentPath string, j *task.TaskConfig) error {
 }
 
 // resolveTaskPath 解析任务文件路径。
-// 优先级：绝对路径 → 相对路径（存在即用）→ SCRIPT_DIR 下查找
+// TODO 删除此函数。优先级：绝对路径 → 相对路径（存在即用）→ SCRIPT_DIR 下查找
 func resolveTaskPath(taskFile, scriptDir string) string {
 	if filepath.IsAbs(taskFile) {
 		return taskFile

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/iotames/detl/log"
 	pkgdsn "github.com/iotames/easydb/dsn"
 	"github.com/iotames/miniutils"
 	"gopkg.in/yaml.v3"
@@ -20,11 +21,31 @@ type SystemConfig struct {
 var cf *Conf
 var once sync.Once
 
-func GetConf(confdir string) *Conf {
+func GetConf() *Conf {
+	if cf == nil {
+		errmsg := "请先调用 SetConf() 初始化配置！"
+		log.Error(errmsg)
+		panic(errmsg)
+	}
+	return cf
+}
+
+func SetConf(confdir string) error {
+	var err error
+	if confdir == "" {
+		err = fmt.Errorf("指定配置目录 confdir 不能为空！")
+	}
+	if cf != nil {
+		err = fmt.Errorf("请勿重复初始化配置！")
+	}
+	if err != nil {
+		log.Error("SetConf 错误", "error", err)
+		return err
+	}
 	once.Do(func() {
 		cf = newConf(confdir)
 	})
-	return cf
+	return nil
 }
 
 func newConf(confdir string) *Conf {
